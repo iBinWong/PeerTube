@@ -1,17 +1,33 @@
+import { NgIf } from '@angular/common'
+import { HttpErrorResponse } from '@angular/common/http'
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, inject, output, viewChild } from '@angular/core'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { ActivatedRoute, Router } from '@angular/router'
+import { AuthService, CanComponentDeactivate, HooksService, MetaService, Notifier, ServerService, UserService } from '@app/core'
+import { buildHTTPErrorResponse, genericUploadErrorHandler, scrollToTop } from '@app/helpers'
+import { FormReactiveService } from '@app/shared/shared-forms/form-reactive.service'
+import { AlertComponent } from '@app/shared/shared-main/common/alert.component'
+import { VideoCaptionService } from '@app/shared/shared-main/video-caption/video-caption.service'
+import { VideoChapterService } from '@app/shared/shared-main/video/video-chapter.service'
+import { VideoEdit } from '@app/shared/shared-main/video/video-edit.model'
+import { Video } from '@app/shared/shared-main/video/video.model'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
+import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
+import { LoadingBarService } from '@ngx-loading-bar/core'
+import { HttpStatusCode, VideoCreateResult } from '@peertube/peertube-models'
+import { logger } from '@root-helpers/logger'
 import { truncate } from 'lodash-es'
 import { UploadState, UploadxService } from 'ngx-uploadx'
 import { Subscription } from 'rxjs'
-import { HttpErrorResponse } from '@angular/common/http'
-import { AfterViewInit, Component, ElementRef, EventEmitter, OnDestroy, OnInit, Output, ViewChild } from '@angular/core'
-import { ActivatedRoute, Router } from '@angular/router'
-import { AuthService, CanComponentDeactivate, HooksService, MetaService, Notifier, ServerService, UserService } from '@app/core'
-import { genericUploadErrorHandler, scrollToTop } from '@app/helpers'
-import { FormReactiveService } from '@app/shared/shared-forms'
-import { Video, VideoCaptionService, VideoChapterService, VideoEdit, VideoService } from '@app/shared/shared-main'
-import { LoadingBarService } from '@ngx-loading-bar/core'
-import { logger } from '@root-helpers/logger'
-import { HttpStatusCode, VideoCreateResult } from '@peertube/peertube-models'
+import { PreviewUploadComponent } from '../../../shared/shared-forms/preview-upload.component'
+import { SelectChannelComponent } from '../../../shared/shared-forms/select/select-channel.component'
+import { SelectOptionsComponent } from '../../../shared/shared-forms/select/select-options.component'
+import { GlobalIconComponent } from '../../../shared/shared-icons/global-icon.component'
+import { ButtonComponent } from '../../../shared/shared-main/buttons/button.component'
+import { UploadProgressComponent } from '../../../shared/standalone-upload/upload-progress.component'
+import { VideoEditComponent } from '../shared/video-edit.component'
 import { VideoUploadService } from '../shared/video-upload.service'
+import { DragDropDirective } from './drag-drop.directive'
 import { VideoSend } from './video-send'
 
 @Component({
@@ -21,12 +37,43 @@ import { VideoSend } from './video-send'
     '../shared/video-edit.component.scss',
     './video-upload.component.scss',
     './video-send.scss'
+  ],
+  imports: [
+    NgIf,
+    DragDropDirective,
+    GlobalIconComponent,
+    NgbTooltip,
+    SelectChannelComponent,
+    FormsModule,
+    SelectOptionsComponent,
+    PreviewUploadComponent,
+    ButtonComponent,
+    UploadProgressComponent,
+    ReactiveFormsModule,
+    VideoEditComponent,
+    AlertComponent
   ]
 })
 export class VideoUploadComponent extends VideoSend implements OnInit, OnDestroy, AfterViewInit, CanComponentDeactivate {
-  @Output() firstStepDone = new EventEmitter<string>()
-  @Output() firstStepError = new EventEmitter<void>()
-  @ViewChild('videofileInput') videofileInput: ElementRef<HTMLInputElement>
+  protected formReactiveService = inject(FormReactiveService)
+  protected loadingBar = inject(LoadingBarService)
+  protected notifier = inject(Notifier)
+  protected authService = inject(AuthService)
+  protected serverService = inject(ServerService)
+  protected videoService = inject(VideoService)
+  protected videoCaptionService = inject(VideoCaptionService)
+  protected videoChapterService = inject(VideoChapterService)
+  private userService = inject(UserService)
+  private router = inject(Router)
+  private hooks = inject(HooksService)
+  private resumableUploadService = inject(UploadxService)
+  private metaService = inject(MetaService)
+  private route = inject(ActivatedRoute)
+  private videoUploadService = inject(VideoUploadService)
+
+  readonly firstStepDone = output<string>()
+  readonly firstStepError = output()
+  readonly videofileInput = viewChild<ElementRef<HTMLInputElement>>('videofileInput')
 
   userVideoQuotaUsed = 0
   userVideoQuotaUsedDaily = 0
@@ -55,34 +102,14 @@ export class VideoUploadComponent extends VideoSend implements OnInit, OnDestroy
 
   private uploadServiceSubscription: Subscription
 
-  constructor (
-    protected formReactiveService: FormReactiveService,
-    protected loadingBar: LoadingBarService,
-    protected notifier: Notifier,
-    protected authService: AuthService,
-    protected serverService: ServerService,
-    protected videoService: VideoService,
-    protected videoCaptionService: VideoCaptionService,
-    protected videoChapterService: VideoChapterService,
-    private userService: UserService,
-    private router: Router,
-    private hooks: HooksService,
-    private resumableUploadService: UploadxService,
-    private metaService: MetaService,
-    private route: ActivatedRoute,
-    private videoUploadService: VideoUploadService
-  ) {
-    super()
-  }
-
   ngOnInit () {
     super.ngOnInit()
 
     this.userService.getMyVideoQuotaUsed()
-        .subscribe(data => {
-          this.userVideoQuotaUsed = data.videoQuotaUsed
-          this.userVideoQuotaUsedDaily = data.videoQuotaUsedDaily
-        })
+      .subscribe(data => {
+        this.userVideoQuotaUsed = data.videoQuotaUsed
+        this.userVideoQuotaUsedDaily = data.videoQuotaUsedDaily
+      })
 
     this.uploadServiceSubscription = this.resumableUploadService.events
       .subscribe(state => this.onUploadVideoOngoing(state))
@@ -140,7 +167,7 @@ export class VideoUploadComponent extends VideoSend implements OnInit, OnDestroy
           return this.refreshTokenAndRetryUpload()
         }
 
-        this.handleUploadError(this.videoUploadService.buildHTTPErrorResponse(state))
+        this.handleUploadError(buildHTTPErrorResponse(state))
         break
       }
 
@@ -178,9 +205,10 @@ export class VideoUploadComponent extends VideoSend implements OnInit, OnDestroy
   }
 
   onFileDropped (files: FileList) {
-    this.videofileInput.nativeElement.files = files
+    const videofileInput = this.videofileInput()
+    videofileInput.nativeElement.files = files
 
-    this.onFileChange({ target: this.videofileInput.nativeElement })
+    this.onFileChange({ target: videofileInput.nativeElement })
   }
 
   onFileChange (event: Event | { target: HTMLInputElement }) {
@@ -247,25 +275,25 @@ export class VideoUploadComponent extends VideoSend implements OnInit, OnDestroy
     this.isUpdatingVideo = true
 
     this.updateVideoAndCaptionsAndChapters({ video, captions: this.videoCaptions, chapters: this.chaptersEdit })
-        .subscribe({
-          next: () => {
-            this.isUpdatingVideo = false
-            this.isUploadingVideo = false
+      .subscribe({
+        next: () => {
+          this.isUpdatingVideo = false
+          this.isUploadingVideo = false
 
-            this.notifier.success($localize`Video published.`)
-            this.router.navigateByUrl(Video.buildWatchUrl(video))
-          },
+          this.notifier.success($localize`Video published.`)
+          this.router.navigateByUrl(Video.buildWatchUrl(video))
+        },
 
-          error: err => {
-            this.error = err.message
-            scrollToTop()
-            logger.error(err)
-          }
-        })
+        error: err => {
+          this.error = err.message
+          scrollToTop()
+          logger.error(err)
+        }
+      })
   }
 
   private getInputVideoFile () {
-    return this.videofileInput.nativeElement.files[0]
+    return this.videofileInput().nativeElement.files[0]
   }
 
   private uploadFile (file: File, previewfile?: File) {

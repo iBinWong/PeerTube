@@ -1,5 +1,5 @@
 import { filter, throttleTime } from 'rxjs'
-import { Injectable } from '@angular/core'
+import { Injectable, inject } from '@angular/core'
 import { AuthService, AuthStatus } from '@app/core/auth'
 import { objectKeysTyped } from '@peertube/peertube-core-utils'
 import { NSFWPolicyType, UserRoleType, UserUpdateMe } from '@peertube/peertube-models'
@@ -11,12 +11,11 @@ import { LocalStorageService } from '../wrappers/storage.service'
 
 @Injectable()
 export class UserLocalStorageService {
+  private authService = inject(AuthService)
+  private server = inject(ServerService)
+  private localStorageService = inject(LocalStorageService)
 
-  constructor (
-    private authService: AuthService,
-    private server: ServerService,
-    private localStorageService: LocalStorageService
-  ) {
+  constructor () {
     this.authService.userInformationLoaded.subscribe({
       next: () => {
         const user = this.authService.getUser()
@@ -107,6 +106,7 @@ export class UserLocalStorageService {
 
     const defaultNSFWPolicy = htmlConfig.instance.defaultNSFWPolicy
     const defaultP2PEnabled = htmlConfig.defaults.p2p.webapp.enabled
+    const defaultAutoPlay = htmlConfig.defaults.player.autoPlay
 
     return {
       nsfwPolicy: this.localStorageService.getItem<NSFWPolicyType>(UserLocalStorageKeys.NSFW_POLICY) || defaultNSFWPolicy,
@@ -114,7 +114,7 @@ export class UserLocalStorageService {
       theme: this.localStorageService.getItem(UserLocalStorageKeys.THEME) || 'instance-default',
       videoLanguages,
 
-      autoPlayVideo: getBoolOrDefault(this.localStorageService.getItem(UserLocalStorageKeys.AUTO_PLAY_VIDEO), true),
+      autoPlayVideo: getBoolOrDefault(this.localStorageService.getItem(UserLocalStorageKeys.AUTO_PLAY_VIDEO), defaultAutoPlay),
       autoPlayNextVideo: getBoolOrDefault(this.localStorageService.getItem(UserLocalStorageKeys.AUTO_PLAY_NEXT_VIDEO), false),
       autoPlayNextVideoPlaylist: getBoolOrDefault(this.localStorageService.getItem(UserLocalStorageKeys.AUTO_PLAY_VIDEO_PLAYLIST), true)
     }
@@ -131,9 +131,9 @@ export class UserLocalStorageService {
       videoLanguages: UserLocalStorageKeys.VIDEO_LANGUAGES
     }
 
-    const obj: [ string, string | boolean | string[] ][] = objectKeysTyped(localStorageKeys)
+    const obj: [string, string | boolean | string[]][] = objectKeysTyped(localStorageKeys)
       .filter(key => key in profile)
-      .map(key => ([ localStorageKeys[key], profile[key] ]))
+      .map(key => [ localStorageKeys[key], profile[key] ])
 
     for (const [ key, value ] of obj) {
       try {

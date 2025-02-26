@@ -1,31 +1,33 @@
-import { filter } from 'rxjs/operators'
-import { Component, OnInit } from '@angular/core'
+import { NgIf } from '@angular/common'
+import { Component, OnInit, inject } from '@angular/core'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { AuthService, Notifier, UserService } from '@app/core'
 import {
   USER_CONFIRM_PASSWORD_VALIDATOR,
   USER_EXISTING_PASSWORD_VALIDATOR,
   USER_PASSWORD_VALIDATOR
 } from '@app/shared/form-validators/user-validators'
-import { FormReactive, FormReactiveService } from '@app/shared/shared-forms'
+import { FormReactive } from '@app/shared/shared-forms/form-reactive'
+import { FormReactiveService } from '@app/shared/shared-forms/form-reactive.service'
+import { AlertComponent } from '@app/shared/shared-main/common/alert.component'
 import { HttpStatusCode, User } from '@peertube/peertube-models'
+import { filter } from 'rxjs/operators'
+import { InputTextComponent } from '../../../shared/shared-forms/input-text.component'
 
 @Component({
   selector: 'my-account-change-password',
   templateUrl: './my-account-change-password.component.html',
-  styleUrls: [ './my-account-change-password.component.scss' ]
+  styleUrls: [ './my-account-change-password.component.scss' ],
+  imports: [ NgIf, FormsModule, ReactiveFormsModule, InputTextComponent, AlertComponent ]
 })
 export class MyAccountChangePasswordComponent extends FormReactive implements OnInit {
-  error: string = null
-  user: User = null
+  protected formReactiveService = inject(FormReactiveService)
+  private notifier = inject(Notifier)
+  private authService = inject(AuthService)
+  private userService = inject(UserService)
 
-  constructor (
-    protected formReactiveService: FormReactiveService,
-    private notifier: Notifier,
-    private authService: AuthService,
-    private userService: UserService
-  ) {
-    super()
-  }
+  error: string
+  user: User
 
   ngOnInit () {
     this.buildForm({
@@ -39,8 +41,8 @@ export class MyAccountChangePasswordComponent extends FormReactive implements On
     const confirmPasswordControl = this.form.get('new-confirmed-password')
 
     confirmPasswordControl.valueChanges
-                          .pipe(filter(v => v !== this.form.value['new-password']))
-                          .subscribe(() => confirmPasswordControl.setErrors({ matchPassword: true }))
+      .pipe(filter(v => v !== this.form.value['new-password']))
+      .subscribe(() => confirmPasswordControl.setErrors({ matchPassword: true }))
   }
 
   changePassword () {

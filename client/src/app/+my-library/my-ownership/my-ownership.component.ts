@@ -1,28 +1,45 @@
-import { SortMeta } from 'primeng/api'
-import { Component, OnInit, ViewChild } from '@angular/core'
+import { NgClass, NgIf } from '@angular/common'
+import { Component, OnInit, inject, viewChild } from '@angular/core'
 import { Notifier, RestPagination, RestTable } from '@app/core'
-import { Account, VideoOwnershipService } from '@app/shared/shared-main'
+import { Account } from '@app/shared/shared-main/account/account.model'
+import { PTDatePipe } from '@app/shared/shared-main/common/date.pipe'
+import { VideoOwnershipService } from '@app/shared/shared-main/video/video-ownership.service'
+import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
 import { VideoChangeOwnership, VideoChangeOwnershipStatus, VideoChangeOwnershipStatusType } from '@peertube/peertube-models'
+import { SharedModule, SortMeta } from 'primeng/api'
+import { TableModule } from 'primeng/table'
+import { ActorAvatarComponent } from '../../shared/shared-actor-image/actor-avatar.component'
+import { ButtonComponent } from '../../shared/shared-main/buttons/button.component'
+import { AutoColspanDirective } from '../../shared/shared-main/common/auto-colspan.directive'
+import { VideoCellComponent } from '../../shared/shared-tables/video-cell.component'
 import { MyAcceptOwnershipComponent } from './my-accept-ownership/my-accept-ownership.component'
 
 @Component({
   templateUrl: './my-ownership.component.html',
-  styleUrls: [ './my-ownership.component.scss' ]
+  imports: [
+    TableModule,
+    SharedModule,
+    NgbTooltip,
+    NgIf,
+    ButtonComponent,
+    ActorAvatarComponent,
+    NgClass,
+    AutoColspanDirective,
+    MyAcceptOwnershipComponent,
+    PTDatePipe,
+    VideoCellComponent
+  ]
 })
 export class MyOwnershipComponent extends RestTable implements OnInit {
+  private notifier = inject(Notifier)
+  private videoOwnershipService = inject(VideoOwnershipService)
+
   videoChangeOwnerships: VideoChangeOwnership[] = []
   totalRecords = 0
   sort: SortMeta = { field: 'createdAt', order: -1 }
   pagination: RestPagination = { count: this.rowsPerPage, start: 0 }
 
-  @ViewChild('myAcceptOwnershipComponent', { static: true }) myAccountAcceptOwnershipComponent: MyAcceptOwnershipComponent
-
-  constructor (
-    private notifier: Notifier,
-    private videoOwnershipService: VideoOwnershipService
-  ) {
-    super()
-  }
+  readonly myAccountAcceptOwnershipComponent = viewChild<MyAcceptOwnershipComponent>('myAcceptOwnershipComponent')
 
   ngOnInit () {
     this.initialize()
@@ -44,7 +61,7 @@ export class MyOwnershipComponent extends RestTable implements OnInit {
   }
 
   openAcceptModal (videoChangeOwnership: VideoChangeOwnership) {
-    this.myAccountAcceptOwnershipComponent.show(videoChangeOwnership)
+    this.myAccountAcceptOwnershipComponent().show(videoChangeOwnership)
   }
 
   accepted () {

@@ -1,25 +1,26 @@
-import { Component, Input, OnInit } from '@angular/core'
+import { Component, OnInit, inject, input } from '@angular/core'
 import { Notifier } from '@app/core'
-import { FormReactive, FormReactiveService } from '@app/shared/shared-forms'
+import { FormReactive } from '@app/shared/shared-forms/form-reactive'
+import { FormReactiveService } from '@app/shared/shared-forms/form-reactive.service'
 import { logger } from '@root-helpers/logger'
 import { USER_HANDLE_VALIDATOR } from '../form-validators/user-validators'
+import { PeerTubeTemplateDirective } from '../shared-main/common/peertube-template.directive'
+import { HelpComponent } from '../shared-main/buttons/help.component'
+import { NgIf } from '@angular/common'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 
 @Component({
   selector: 'my-remote-subscribe',
   templateUrl: './remote-subscribe.component.html',
-  styleUrls: [ './remote-subscribe.component.scss' ]
+  imports: [ FormsModule, ReactiveFormsModule, NgIf, HelpComponent, PeerTubeTemplateDirective ]
 })
 export class RemoteSubscribeComponent extends FormReactive implements OnInit {
-  @Input() uri: string
-  @Input() interact = false
-  @Input() showHelp = false
+  protected formReactiveService = inject(FormReactiveService)
+  private notifier = inject(Notifier)
 
-  constructor (
-    protected formReactiveService: FormReactiveService,
-    private notifier: Notifier
-  ) {
-    super()
-  }
+  readonly uri = input<string>(undefined)
+  readonly interact = input(false)
+  readonly showHelp = input(false)
 
   ngOnInit () {
     this.buildForm({
@@ -55,7 +56,7 @@ export class RemoteSubscribeComponent extends FormReactive implements OnInit {
         })
 
         if (link?.template.includes('{uri}')) {
-          return link.template.replace('{uri}', encodeURIComponent(this.uri))
+          return link.template.replace('{uri}', encodeURIComponent(this.uri()))
         }
 
         throw new Error('No subscribe template in webfinger response')

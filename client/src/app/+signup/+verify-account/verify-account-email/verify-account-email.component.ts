@@ -1,14 +1,23 @@
-import { Component, OnInit } from '@angular/core'
-import { ActivatedRoute } from '@angular/router'
+import { NgIf } from '@angular/common'
+import { Component, OnInit, inject } from '@angular/core'
+import { ActivatedRoute, RouterLink } from '@angular/router'
 import { SignupService } from '@app/+signup/shared/signup.service'
 import { AuthService, Notifier, ServerService } from '@app/core'
+import { AlertComponent } from '@app/shared/shared-main/common/alert.component'
+import { SignupSuccessAfterEmailComponent } from '../../shared/signup-success-after-email.component'
 
 @Component({
   selector: 'my-verify-account-email',
-  templateUrl: './verify-account-email.component.html'
+  templateUrl: './verify-account-email.component.html',
+  imports: [ NgIf, SignupSuccessAfterEmailComponent, RouterLink, AlertComponent ]
 })
-
 export class VerifyAccountEmailComponent implements OnInit {
+  private signupService = inject(SignupService)
+  private server = inject(ServerService)
+  private authService = inject(AuthService)
+  private notifier = inject(Notifier)
+  private route = inject(ActivatedRoute)
+
   success = false
   failed = false
   isPendingEmail = false
@@ -19,15 +28,6 @@ export class VerifyAccountEmailComponent implements OnInit {
   private userId: number
   private registrationId: number
   private verificationString: string
-
-  constructor (
-    private signupService: SignupService,
-    private server: ServerService,
-    private authService: AuthService,
-    private notifier: Notifier,
-    private route: ActivatedRoute
-  ) {
-  }
 
   get instanceName () {
     return this.server.getHTMLConfig().instance.name

@@ -1,35 +1,38 @@
-import { Component, EventEmitter, OnInit, Output, ViewChild } from '@angular/core'
+import { NgClass, NgIf } from '@angular/common'
+import { Component, OnInit, inject, output, viewChild } from '@angular/core'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { Notifier, ServerService } from '@app/core'
-import { FormReactive, FormReactiveService } from '@app/shared/shared-forms'
+import { FormReactive } from '@app/shared/shared-forms/form-reactive'
+import { FormReactiveService } from '@app/shared/shared-forms/form-reactive.service'
+import { AlertComponent } from '@app/shared/shared-main/common/alert.component'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap/modal/modal-ref'
 import { UserRegistration } from '@peertube/peertube-models'
+import { PeertubeCheckboxComponent } from '../../../shared/shared-forms/peertube-checkbox.component'
+import { GlobalIconComponent } from '../../../shared/shared-icons/global-icon.component'
 import { AdminRegistrationService } from './admin-registration.service'
 import { REGISTRATION_MODERATION_RESPONSE_VALIDATOR } from './process-registration-validators'
 
 @Component({
   selector: 'my-process-registration-modal',
-  templateUrl: './process-registration-modal.component.html'
+  templateUrl: './process-registration-modal.component.html',
+  imports: [ NgIf, GlobalIconComponent, FormsModule, ReactiveFormsModule, NgClass, PeertubeCheckboxComponent, AlertComponent ]
 })
 export class ProcessRegistrationModalComponent extends FormReactive implements OnInit {
-  @ViewChild('modal', { static: true }) modal: NgbModal
+  protected formReactiveService = inject(FormReactiveService)
+  private server = inject(ServerService)
+  private modalService = inject(NgbModal)
+  private notifier = inject(Notifier)
+  private registrationService = inject(AdminRegistrationService)
 
-  @Output() registrationProcessed = new EventEmitter()
+  readonly modal = viewChild<NgbModal>('modal')
+
+  readonly registrationProcessed = output()
 
   registration: UserRegistration
 
   private openedModal: NgbModalRef
   private processMode: 'accept' | 'reject'
-
-  constructor (
-    protected formReactiveService: FormReactiveService,
-    private server: ServerService,
-    private modalService: NgbModal,
-    private notifier: Notifier,
-    private registrationService: AdminRegistrationService
-  ) {
-    super()
-  }
 
   ngOnInit () {
     this.buildForm({
@@ -54,7 +57,7 @@ export class ProcessRegistrationModalComponent extends FormReactive implements O
       preventEmailDelivery: !this.isEmailEnabled() || registration.emailVerified !== true
     })
 
-    this.openedModal = this.modalService.open(this.modal, { centered: true })
+    this.openedModal = this.modalService.open(this.modal(), { centered: true })
   }
 
   hide () {

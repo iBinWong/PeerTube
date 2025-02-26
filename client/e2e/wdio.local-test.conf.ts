@@ -28,22 +28,13 @@ module.exports = {
         'browserName': 'chrome',
         'acceptInsecureCerts': true,
         'goog:chromeOptions': {
-          args: [ '--headless', '--disable-gpu', windowSizeArg ],
-          prefs
-        }
-      },
-      {
-        'browserName': 'firefox',
-        'moz:firefoxOptions': {
-          binary: '/usr/bin/firefox-developer-edition',
-          args: [ '--headless', windowSizeArg ],
-
+          args: [ '--disable-gpu', windowSizeArg ],
           prefs
         }
       }
     ],
 
-    services: [ 'chromedriver', 'geckodriver', 'shared-store' ],
+    services: [ 'shared-store' ],
 
     beforeSession: beforeLocalSession,
     beforeSuite: beforeLocalSuite,

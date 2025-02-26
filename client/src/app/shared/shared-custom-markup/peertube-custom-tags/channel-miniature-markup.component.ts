@@ -1,54 +1,61 @@
 import { from } from 'rxjs'
 import { finalize, map, switchMap, tap } from 'rxjs/operators'
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output } from '@angular/core'
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject, input, output } from '@angular/core'
 import { MarkdownService, Notifier, UserService } from '@app/core'
-import { FindInBulkService } from '@app/shared/shared-search'
 import { VideoSortField } from '@peertube/peertube-models'
-import { Video, VideoChannel, VideoService } from '../../shared-main'
 import { CustomMarkupComponent } from './shared'
+import { VideoMiniatureMarkupComponent } from './video-miniature-markup.component'
+import { RouterLink } from '@angular/router'
+import { ActorAvatarComponent } from '../../shared-actor-image/actor-avatar.component'
+import { NgIf } from '@angular/common'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
+import { VideoChannel } from '@app/shared/shared-main/channel/video-channel.model'
+import { Video } from '@app/shared/shared-main/video/video.model'
+import { FindInBulkService } from '@app/shared/shared-search/find-in-bulk.service'
 
 /*
  * Markup component that creates a channel miniature only
-*/
+ */
 
 @Component({
   selector: 'my-channel-miniature-markup',
   templateUrl: 'channel-miniature-markup.component.html',
   styleUrls: [ 'channel-miniature-markup.component.scss' ],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ NgIf, ActorAvatarComponent, RouterLink, VideoMiniatureMarkupComponent ]
 })
 export class ChannelMiniatureMarkupComponent implements CustomMarkupComponent, OnInit {
-  @Input() name: string
-  @Input() displayLatestVideo: boolean
-  @Input() displayDescription: boolean
+  private markdown = inject(MarkdownService)
+  private findInBulk = inject(FindInBulkService)
+  private videoService = inject(VideoService)
+  private userService = inject(UserService)
+  private notifier = inject(Notifier)
+  private cd = inject(ChangeDetectorRef)
 
-  @Output() loaded = new EventEmitter<boolean>()
+  readonly name = input<string>(undefined)
+  readonly displayLatestVideo = input<boolean>(undefined)
+  readonly displayDescription = input<boolean>(undefined)
+
+  readonly loaded = output<boolean>()
 
   channel: VideoChannel
   descriptionHTML: string
   totalVideos: number
   video: Video
 
-  constructor (
-    private markdown: MarkdownService,
-    private findInBulk: FindInBulkService,
-    private videoService: VideoService,
-    private userService: UserService,
-    private notifier: Notifier,
-    private cd: ChangeDetectorRef
-  ) { }
-
   ngOnInit () {
-    this.findInBulk.getChannel(this.name)
+    this.findInBulk.getChannel(this.name())
       .pipe(
         tap(channel => {
           this.channel = channel
         }),
-        switchMap(() => from(this.markdown.textMarkdownToHTML({
-          markdown: this.channel.description,
-          withEmoji: true,
-          withHtml: true
-        }))),
+        switchMap(() =>
+          from(this.markdown.textMarkdownToHTML({
+            markdown: this.channel.description,
+            withEmoji: true,
+            withHtml: true
+          }))
+        ),
         tap(html => {
           this.descriptionHTML = html
         }),

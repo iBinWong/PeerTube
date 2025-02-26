@@ -1,25 +1,43 @@
-import { Component, ElementRef, ViewChild } from '@angular/core'
-import { Video } from '@app/shared/shared-main'
+import { NgFor, NgIf } from '@angular/common'
+import { Component, ElementRef, inject, viewChild } from '@angular/core'
+import { RouterLink } from '@angular/router'
+import { Video } from '@app/shared/shared-main/video/video.model'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { LiveVideo, LiveVideoError, LiveVideoErrorType, LiveVideoSession } from '@peertube/peertube-models'
+import { InputTextComponent } from '../shared-forms/input-text.component'
+import { GlobalIconComponent } from '../shared-icons/global-icon.component'
+import { EditButtonComponent } from '../shared-main/buttons/edit-button.component'
+import { AlertComponent } from '../shared-main/common/alert.component'
+import { PTDatePipe } from '../shared-main/common/date.pipe'
+import { LiveDocumentationLinkComponent } from './live-documentation-link.component'
 import { LiveVideoService } from './live-video.service'
 
 @Component({
   selector: 'my-live-stream-information',
   templateUrl: './live-stream-information.component.html',
-  styleUrls: [ './live-stream-information.component.scss' ]
+  styleUrls: [ './live-stream-information.component.scss' ],
+  imports: [
+    GlobalIconComponent,
+    NgIf,
+    LiveDocumentationLinkComponent,
+    InputTextComponent,
+    NgFor,
+    RouterLink,
+    EditButtonComponent,
+    PTDatePipe,
+    AlertComponent
+  ],
+  providers: [ LiveVideoService ]
 })
 export class LiveStreamInformationComponent {
-  @ViewChild('modal', { static: true }) modal: ElementRef
+  private modalService = inject(NgbModal)
+  private liveVideoService = inject(LiveVideoService)
+
+  readonly modal = viewChild<ElementRef>('modal')
 
   video: Video
   live: LiveVideo
   latestLiveSessions: LiveVideoSession[] = []
-
-  constructor (
-    private modalService: NgbModal,
-    private liveVideoService: LiveVideoService
-  ) { }
 
   show (video: Video) {
     this.video = video
@@ -28,7 +46,7 @@ export class LiveStreamInformationComponent {
     this.loadLiveInfo(video)
 
     this.modalService
-      .open(this.modal, { centered: true })
+      .open(this.modal(), { centered: true })
   }
 
   getVideoUrl (video: { shortUUID: string }) {
@@ -38,14 +56,16 @@ export class LiveStreamInformationComponent {
   getErrorLabel (session: LiveVideoSession) {
     if (!session.error) return undefined
 
-    const errors: { [ id in LiveVideoErrorType ]: string } = {
+    const errors: { [id in LiveVideoErrorType]: string } = {
       [LiveVideoError.BAD_SOCKET_HEALTH]: $localize`Server too slow`,
       [LiveVideoError.BLACKLISTED]: $localize`Live blacklisted`,
       [LiveVideoError.DURATION_EXCEEDED]: $localize`Max duration exceeded`,
       [LiveVideoError.FFMPEG_ERROR]: $localize`Server error`,
       [LiveVideoError.QUOTA_EXCEEDED]: $localize`Quota exceeded`,
       [LiveVideoError.RUNNER_JOB_CANCEL]: $localize`Runner job cancelled`,
-      [LiveVideoError.RUNNER_JOB_ERROR]: $localize`Error in runner job`
+      [LiveVideoError.RUNNER_JOB_ERROR]: $localize`Error in runner job`,
+      [LiveVideoError.UNKNOWN_ERROR]: $localize`Unknown error`,
+      [LiveVideoError.INVALID_INPUT_VIDEO_STREAM]: $localize`Invalid input video stream`
     }
 
     return errors[session.error]

@@ -1,24 +1,41 @@
 import { from, Subject, Subscription } from 'rxjs'
 import { concatMap, map, switchMap, tap } from 'rxjs/operators'
-import { Component, OnDestroy, OnInit } from '@angular/core'
+import { Component, OnDestroy, OnInit, inject } from '@angular/core'
 import { ComponentPagination, hasMoreItems, MarkdownService, User, UserService } from '@app/core'
 import { SimpleMemoize } from '@app/helpers'
-import { Account, AccountService, Video, VideoChannel, VideoChannelService, VideoService } from '@app/shared/shared-main'
-import { MiniatureDisplayOptions } from '@app/shared/shared-video-miniature'
 import { NSFWPolicyType, VideoSortField } from '@peertube/peertube-models'
+import { MiniatureDisplayOptions, VideoMiniatureComponent } from '../../shared/shared-video-miniature/video-miniature.component'
+import { SubscribeButtonComponent } from '../../shared/shared-user-subscription/subscribe-button.component'
+import { RouterLink } from '@angular/router'
+import { ActorAvatarComponent } from '../../shared/shared-actor-image/actor-avatar.component'
+import { InfiniteScrollerDirective } from '../../shared/shared-main/common/infinite-scroller.directive'
+import { NgIf, NgFor } from '@angular/common'
+import { AccountService } from '@app/shared/shared-main/account/account.service'
+import { VideoChannelService } from '@app/shared/shared-main/channel/video-channel.service'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
+import { VideoChannel } from '@app/shared/shared-main/channel/video-channel.model'
+import { Account } from '@app/shared/shared-main/account/account.model'
+import { Video } from '@app/shared/shared-main/video/video.model'
 
 @Component({
   selector: 'my-account-video-channels',
   templateUrl: './account-video-channels.component.html',
-  styleUrls: [ './account-video-channels.component.scss' ]
+  styleUrls: [ './account-video-channels.component.scss' ],
+  imports: [ NgIf, InfiniteScrollerDirective, NgFor, ActorAvatarComponent, RouterLink, SubscribeButtonComponent, VideoMiniatureComponent ]
 })
 export class AccountVideoChannelsComponent implements OnInit, OnDestroy {
+  private accountService = inject(AccountService)
+  private videoChannelService = inject(VideoChannelService)
+  private videoService = inject(VideoService)
+  private markdown = inject(MarkdownService)
+  private userService = inject(UserService)
+
   account: Account
   videoChannels: VideoChannel[] = []
 
   videos: { [id: number]: { total: number, videos: Video[] } } = {}
 
-  channelsDescriptionHTML: { [ id: number ]: string } = {}
+  channelsDescriptionHTML: { [id: number]: string } = {}
 
   channelPagination: ComponentPagination = {
     currentPage: 1,
@@ -50,23 +67,15 @@ export class AccountVideoChannelsComponent implements OnInit, OnDestroy {
 
   private accountSub: Subscription
 
-  constructor (
-    private accountService: AccountService,
-    private videoChannelService: VideoChannelService,
-    private videoService: VideoService,
-    private markdown: MarkdownService,
-    private userService: UserService
-  ) { }
-
   ngOnInit () {
     // Parent get the account for us
     this.accountSub = this.accountService.accountLoaded
-        .subscribe(account => {
-          this.account = account
-          this.videoChannels = []
+      .subscribe(account => {
+        this.account = account
+        this.videoChannels = []
 
-          this.loadMoreChannels()
-        })
+        this.loadMoreChannels()
+      })
 
     this.userService.getAnonymousOrLoggedUser()
       .subscribe(user => {

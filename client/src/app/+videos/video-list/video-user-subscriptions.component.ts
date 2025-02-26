@@ -1,19 +1,26 @@
-
 import { firstValueFrom } from 'rxjs'
 import { switchMap, tap } from 'rxjs/operators'
-import { Component } from '@angular/core'
+import { Component, inject } from '@angular/core'
 import { AuthService, ComponentPaginationLight, DisableForReuseHook, ScopedTokensService } from '@app/core'
 import { HooksService } from '@app/core/plugins/hooks.service'
-import { VideoService } from '@app/shared/shared-main'
-import { UserSubscriptionService } from '@app/shared/shared-user-subscription'
-import { VideoFilters } from '@app/shared/shared-video-miniature'
 import { VideoSortField } from '@peertube/peertube-models'
+import { VideosListComponent } from '../../shared/shared-video-miniature/videos-list.component'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
+import { UserSubscriptionService } from '@app/shared/shared-user-subscription/user-subscription.service'
+import { VideoFilters } from '@app/shared/shared-video-miniature/video-filters.model'
 
 @Component({
   selector: 'my-videos-user-subscriptions',
-  templateUrl: './video-user-subscriptions.component.html'
+  templateUrl: './video-user-subscriptions.component.html',
+  imports: [ VideosListComponent ]
 })
 export class VideoUserSubscriptionsComponent implements DisableForReuseHook {
+  private authService = inject(AuthService)
+  private userSubscription = inject(UserSubscriptionService)
+  private hooks = inject(HooksService)
+  private videoService = inject(VideoService)
+  private scopedTokensService = inject(ScopedTokensService)
+
   getVideosObservableFunction = this.getVideosObservable.bind(this)
   getSyndicationItemsFunction = this.getSyndicationItems.bind(this)
 
@@ -22,26 +29,14 @@ export class VideoUserSubscriptionsComponent implements DisableForReuseHook {
   actions = [
     {
       routerLink: '/my-library/subscriptions',
-      label: $localize`Subscriptions`,
+      label: $localize`Manage`,
       iconName: 'cog' as 'cog'
     }
   ]
 
-  titlePage = $localize`Videos from your subscriptions`
-
   disabled = false
 
   private feedToken: string
-
-  constructor (
-    private authService: AuthService,
-    private userSubscription: UserSubscriptionService,
-    private hooks: HooksService,
-    private videoService: VideoService,
-    private scopedTokensService: ScopedTokensService
-  ) {
-
-  }
 
   getVideosObservable (pagination: ComponentPaginationLight, filters: VideoFilters) {
     const params = {

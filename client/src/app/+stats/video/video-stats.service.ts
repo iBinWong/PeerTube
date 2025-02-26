@@ -1,21 +1,19 @@
 import { catchError } from 'rxjs'
 import { environment } from 'src/environments/environment'
 import { HttpClient, HttpParams } from '@angular/common/http'
-import { Injectable } from '@angular/core'
+import { Injectable, inject } from '@angular/core'
 import { RestExtractor } from '@app/core'
-import { VideoService } from '@app/shared/shared-main'
 import { VideoStatsOverall, VideoStatsRetention, VideoStatsTimeserie, VideoStatsTimeserieMetric } from '@peertube/peertube-models'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
 
 @Injectable({
   providedIn: 'root'
 })
 export class VideoStatsService {
-  static BASE_VIDEO_STATS_URL = environment.apiUrl + '/api/v1/videos/'
+  private authHttp = inject(HttpClient)
+  private restExtractor = inject(RestExtractor)
 
-  constructor (
-    private authHttp: HttpClient,
-    private restExtractor: RestExtractor
-  ) { }
+  static BASE_VIDEO_STATS_URL = environment.apiUrl + '/api/v1/videos/'
 
   getOverallStats (options: {
     videoId: string

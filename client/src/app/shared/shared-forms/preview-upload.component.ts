@@ -1,9 +1,11 @@
-import { Component, forwardRef, Input, OnInit } from '@angular/core'
+import { Component, forwardRef, OnInit, inject, input } from '@angular/core'
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms'
 import { ServerService } from '@app/core'
 import { imageToDataURL } from '@root-helpers/images'
 import { HTMLServerConfig } from '@peertube/peertube-models'
-import { BytesPipe } from '../shared-main'
+import { NgIf, NgStyle } from '@angular/common'
+import { ReactiveFileComponent } from './reactive-file.component'
+import { BytesPipe } from '../shared-main/common/bytes.pipe'
 
 @Component({
   selector: 'my-preview-upload',
@@ -15,13 +17,16 @@ import { BytesPipe } from '../shared-main'
       useExisting: forwardRef(() => PreviewUploadComponent),
       multi: true
     }
-  ]
+  ],
+  imports: [ ReactiveFileComponent, NgIf, NgStyle ]
 })
 export class PreviewUploadComponent implements OnInit, ControlValueAccessor {
-  @Input() inputLabel: string
-  @Input() inputName: string
-  @Input() previewWidth: string
-  @Input() previewHeight: string
+  private serverService = inject(ServerService)
+
+  readonly inputLabel = input<string>(undefined)
+  readonly inputName = input<string>(undefined)
+  readonly previewWidth = input<string>(undefined)
+  readonly previewHeight = input<string>(undefined)
 
   imageSrc: string
   allowedExtensionsMessage = ''
@@ -31,9 +36,7 @@ export class PreviewUploadComponent implements OnInit, ControlValueAccessor {
   private bytesPipe: BytesPipe
   private file: Blob
 
-  constructor (
-    private serverService: ServerService
-  ) {
+  constructor () {
     this.bytesPipe = new BytesPipe()
     this.maxSizeText = $localize`max size`
   }
@@ -67,7 +70,9 @@ export class PreviewUploadComponent implements OnInit, ControlValueAccessor {
     this.updatePreview()
   }
 
-  propagateChange = (_: any) => { /* empty */ }
+  propagateChange = (_: any) => {
+    // empty
+  }
 
   writeValue (file: any) {
     this.file = file

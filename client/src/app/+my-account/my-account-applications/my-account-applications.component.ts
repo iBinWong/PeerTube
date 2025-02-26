@@ -1,30 +1,31 @@
-import { Component, OnInit } from '@angular/core'
+import { Component, OnInit, inject } from '@angular/core'
 import { AuthService, ConfirmService, Notifier, ScopedTokensService } from '@app/core'
-import { VideoService } from '@app/shared/shared-main'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
 import { FeedFormat, ScopedToken } from '@peertube/peertube-models'
 import { environment } from '../../../environments/environment'
+import { InputTextComponent } from '../../shared/shared-forms/input-text.component'
 
 @Component({
   selector: 'my-account-applications',
   templateUrl: './my-account-applications.component.html',
-  styleUrls: [ './my-account-applications.component.scss' ]
+  styleUrls: [ './my-account-applications.component.scss' ],
+  imports: [ InputTextComponent ]
 })
 export class MyAccountApplicationsComponent implements OnInit {
+  private authService = inject(AuthService)
+  private scopedTokensService = inject(ScopedTokensService)
+  private videoService = inject(VideoService)
+  private notifier = inject(Notifier)
+  private confirmService = inject(ConfirmService)
+
   feedUrl: string
   feedToken: string
 
   private baseURL = environment.originServerUrl || window.location.origin
 
-  constructor (
-    private authService: AuthService,
-    private scopedTokensService: ScopedTokensService,
-    private videoService: VideoService,
-    private notifier: Notifier,
-    private confirmService: ConfirmService
-  ) {}
-
   ngOnInit () {
     this.feedUrl = this.baseURL
+
     this.scopedTokensService.getScopedTokens()
       .subscribe({
         next: tokens => this.regenApplications(tokens),

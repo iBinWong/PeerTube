@@ -1,19 +1,45 @@
-import { SortMeta } from 'primeng/api'
-import { Component, OnInit, ViewChild } from '@angular/core'
+import { NgIf } from '@angular/common'
+import { Component, OnInit, inject, viewChild } from '@angular/core'
 import { ConfirmService, Notifier, RestPagination, RestTable } from '@app/core'
-import { AdvancedInputFilter } from '@app/shared/shared-forms'
-import { InstanceFollowService } from '@app/shared/shared-instance'
-import { ActorFollow } from '@peertube/peertube-models'
-import { FollowModalComponent } from './follow-modal.component'
-import { DropdownAction } from '@app/shared/shared-main'
 import { formatICU } from '@app/helpers'
+import { InstanceFollowService } from '@app/shared/shared-instance/instance-follow.service'
+import { PTDatePipe } from '@app/shared/shared-main/common/date.pipe'
+import { ActorFollow } from '@peertube/peertube-models'
+import { SharedModule, SortMeta } from 'primeng/api'
+import { TableModule } from 'primeng/table'
+import { AdvancedInputFilter, AdvancedInputFilterComponent } from '../../../shared/shared-forms/advanced-input-filter.component'
+import { GlobalIconComponent } from '../../../shared/shared-icons/global-icon.component'
+import { ActionDropdownComponent, DropdownAction } from '../../../shared/shared-main/buttons/action-dropdown.component'
+import { ButtonComponent } from '../../../shared/shared-main/buttons/button.component'
+import { DeleteButtonComponent } from '../../../shared/shared-main/buttons/delete-button.component'
+import { AutoColspanDirective } from '../../../shared/shared-main/common/auto-colspan.directive'
+import { RedundancyCheckboxComponent } from '../shared/redundancy-checkbox.component'
+import { FollowModalComponent } from './follow-modal.component'
 
 @Component({
   templateUrl: './following-list.component.html',
-  styleUrls: [ './following-list.component.scss' ]
+  styleUrls: [ './following-list.component.scss' ],
+  imports: [
+    GlobalIconComponent,
+    TableModule,
+    SharedModule,
+    NgIf,
+    ActionDropdownComponent,
+    AdvancedInputFilterComponent,
+    DeleteButtonComponent,
+    RedundancyCheckboxComponent,
+    AutoColspanDirective,
+    FollowModalComponent,
+    PTDatePipe,
+    ButtonComponent
+  ]
 })
-export class FollowingListComponent extends RestTable <ActorFollow> implements OnInit {
-  @ViewChild('followModal') followModal: FollowModalComponent
+export class FollowingListComponent extends RestTable<ActorFollow> implements OnInit {
+  private notifier = inject(Notifier)
+  private confirmService = inject(ConfirmService)
+  private followService = inject(InstanceFollowService)
+
+  readonly followModal = viewChild<FollowModalComponent>('followModal')
 
   following: ActorFollow[] = []
   totalRecords = 0
@@ -23,14 +49,6 @@ export class FollowingListComponent extends RestTable <ActorFollow> implements O
   searchFilters: AdvancedInputFilter[] = []
 
   bulkActions: DropdownAction<ActorFollow[]>[] = []
-
-  constructor (
-    private notifier: Notifier,
-    private confirmService: ConfirmService,
-    private followService: InstanceFollowService
-  ) {
-    super()
-  }
 
   ngOnInit () {
     this.initialize()
@@ -50,7 +68,7 @@ export class FollowingListComponent extends RestTable <ActorFollow> implements O
   }
 
   openFollowModal () {
-    this.followModal.openModal()
+    this.followModal().openModal()
   }
 
   isInstanceFollowing (follow: ActorFollow) {
@@ -91,13 +109,13 @@ export class FollowingListComponent extends RestTable <ActorFollow> implements O
 
   protected reloadDataInternal () {
     this.followService.getFollowing({ pagination: this.pagination, sort: this.sort, search: this.search })
-                      .subscribe({
-                        next: resultList => {
-                          this.following = resultList.data
-                          this.totalRecords = resultList.total
-                        },
+      .subscribe({
+        next: resultList => {
+          this.following = resultList.data
+          this.totalRecords = resultList.total
+        },
 
-                        error: err => this.notifier.error(err.message)
-                      })
+        error: err => this.notifier.error(err.message)
+      })
   }
 }

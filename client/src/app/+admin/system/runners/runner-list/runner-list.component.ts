@@ -1,15 +1,31 @@
-import { SortMeta } from 'primeng/api'
-import { Component, OnInit } from '@angular/core'
+import { Component, OnInit, inject } from '@angular/core'
 import { ConfirmService, Notifier, RestPagination, RestTable } from '@app/core'
-import { DropdownAction } from '@app/shared/shared-main'
+import { PTDatePipe } from '@app/shared/shared-main/common/date.pipe'
+import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
 import { Runner } from '@peertube/peertube-models'
+import { SharedModule, SortMeta } from 'primeng/api'
+import { TableModule } from 'primeng/table'
+import { ActionDropdownComponent, DropdownAction } from '../../../../shared/shared-main/buttons/action-dropdown.component'
+import { AutoColspanDirective } from '../../../../shared/shared-main/common/auto-colspan.directive'
 import { RunnerService } from '../runner.service'
 
 @Component({
   selector: 'my-runner-list',
-  templateUrl: './runner-list.component.html'
+  templateUrl: './runner-list.component.html',
+  imports: [
+    TableModule,
+    SharedModule,
+    NgbTooltip,
+    ActionDropdownComponent,
+    AutoColspanDirective,
+    PTDatePipe
+  ]
 })
-export class RunnerListComponent extends RestTable <Runner> implements OnInit {
+export class RunnerListComponent extends RestTable<Runner> implements OnInit {
+  private runnerService = inject(RunnerService)
+  private notifier = inject(Notifier)
+  private confirmService = inject(ConfirmService)
+
   runners: Runner[] = []
   totalRecords = 0
 
@@ -17,14 +33,6 @@ export class RunnerListComponent extends RestTable <Runner> implements OnInit {
   pagination: RestPagination = { count: this.rowsPerPage, start: 0 }
 
   actions: DropdownAction<Runner>[][] = []
-
-  constructor (
-    private runnerService: RunnerService,
-    private notifier: Notifier,
-    private confirmService: ConfirmService
-  ) {
-    super()
-  }
 
   ngOnInit () {
     this.actions = [
@@ -52,14 +60,14 @@ export class RunnerListComponent extends RestTable <Runner> implements OnInit {
     if (res === false) return
 
     this.runnerService.deleteRunner(runner)
-        .subscribe({
-          next: () => {
-            this.reloadData()
-            this.notifier.success($localize`Runner removed.`)
-          },
+      .subscribe({
+        next: () => {
+          this.reloadData()
+          this.notifier.success($localize`Runner removed.`)
+        },
 
-          error: err => this.notifier.error(err.message)
-        })
+        error: err => this.notifier.error(err.message)
+      })
   }
 
   protected reloadDataInternal () {

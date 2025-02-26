@@ -1,8 +1,12 @@
-import { Component, ElementRef, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core'
+import { NgIf } from '@angular/common'
+import { Component, ElementRef, OnChanges, OnInit, booleanAttribute, inject, input, output, viewChild } from '@angular/core'
 import { Notifier, ServerService } from '@app/core'
-import { Account, VideoChannel } from '@app/shared/shared-main'
+import { NgbDropdown, NgbDropdownMenu, NgbDropdownToggle, NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
+import { ActorImage } from '@peertube/peertube-models'
 import { getBytes } from '@root-helpers/bytes'
 import { imageToDataURL } from '@root-helpers/images'
+import { ActorAvatarComponent, ActorAvatarInput } from '../shared-actor-image/actor-avatar.component'
+import { GlobalIconComponent } from '../shared-icons/global-icon.component'
 
 @Component({
   selector: 'my-actor-avatar-edit',
@@ -10,19 +14,28 @@ import { imageToDataURL } from '@root-helpers/images'
   styleUrls: [
     './actor-image-edit.scss',
     './actor-avatar-edit.component.scss'
-  ]
+  ],
+  imports: [ NgIf, ActorAvatarComponent, NgbTooltip, GlobalIconComponent, NgbDropdown, NgbDropdownToggle, NgbDropdownMenu ]
 })
-export class ActorAvatarEditComponent implements OnInit {
-  @ViewChild('avatarfileInput') avatarfileInput: ElementRef<HTMLInputElement>
+export class ActorAvatarEditComponent implements OnInit, OnChanges {
+  private serverService = inject(ServerService)
+  private notifier = inject(Notifier)
 
-  @Input() actor: VideoChannel | Account
-  @Input() editable = true
-  @Input() displaySubscribers = true
-  @Input() displayUsername = true
-  @Input() previewImage = false
+  readonly avatarfileInput = viewChild<ElementRef<HTMLInputElement>>('avatarfileInput')
 
-  @Output() avatarChange = new EventEmitter<FormData>()
-  @Output() avatarDelete = new EventEmitter<void>()
+  readonly actorType = input.required<'channel' | 'account'>()
+  readonly avatars = input.required<ActorImage[]>()
+  readonly username = input.required<string>()
+
+  readonly displayName = input<string>(undefined)
+  readonly subscribers = input<number>(undefined)
+
+  readonly displayUsername = input(true, { transform: booleanAttribute })
+  readonly editable = input(true, { transform: booleanAttribute })
+  readonly previewImage = input(false, { transform: booleanAttribute })
+
+  readonly avatarChange = output<FormData>()
+  readonly avatarDelete = output()
 
   avatarFormat = ''
   maxAvatarSize = 0
@@ -30,10 +43,7 @@ export class ActorAvatarEditComponent implements OnInit {
 
   preview: string
 
-  constructor (
-    private serverService: ServerService,
-    private notifier: Notifier
-  ) { }
+  actor: ActorAvatarInput
 
   ngOnInit (): void {
     const config = this.serverService.getHTMLConfig()
@@ -41,14 +51,18 @@ export class ActorAvatarEditComponent implements OnInit {
     this.maxAvatarSize = config.avatar.file.size.max
     this.avatarExtensions = config.avatar.file.extensions.join(', ')
 
-    this.avatarFormat = `${$localize`max size`}: 192*192px, ` +
-                        `${getBytes(this.maxAvatarSize)} ${$localize`extensions`}: ${this.avatarExtensions}`
+    this.avatarFormat = $localize`max size: 192*192px, ${getBytes(this.maxAvatarSize)} extensions: ${this.avatarExtensions}`
   }
 
-  onAvatarChange (input: HTMLInputElement) {
-    this.avatarfileInput = new ElementRef(input)
+  ngOnChanges () {
+    this.actor = {
+      avatars: this.avatars(),
+      name: this.username()
+    }
+  }
 
-    const avatarfile = this.avatarfileInput.nativeElement.files[0]
+  onAvatarChange () {
+    const avatarfile = this.avatarfileInput().nativeElement.files[0]
     if (avatarfile.size > this.maxAvatarSize) {
       this.notifier.error('Error', $localize`This image is too large.`)
       return
@@ -58,7 +72,7 @@ export class ActorAvatarEditComponent implements OnInit {
     formData.append('avatarfile', avatarfile)
     this.avatarChange.emit(formData)
 
-    if (this.previewImage) {
+    if (this.previewImage()) {
       imageToDataURL(avatarfile).then(result => this.preview = result)
     }
   }
@@ -69,12 +83,6 @@ export class ActorAvatarEditComponent implements OnInit {
   }
 
   hasAvatar () {
-    return !!this.preview || this.actor.avatars.length !== 0
-  }
-
-  getActorType () {
-    if ((this.actor as VideoChannel).ownerAccount) return 'channel'
-
-    return 'account'
+    return !!this.preview || this.avatars().length !== 0
   }
 }

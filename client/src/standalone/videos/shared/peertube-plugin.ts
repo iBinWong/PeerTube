@@ -4,6 +4,7 @@ import { PluginInfo, PluginsManager } from '../../../root-helpers'
 import { RegisterClientHelpers } from '../../../types'
 import { AuthHTTP } from './auth-http'
 import { Translations } from './translations'
+import { getBackendUrl } from './url'
 
 export class PeerTubePlugin {
 
@@ -18,7 +19,8 @@ export class PeerTubePlugin {
       peertubeHelpersFactory: pluginInfo => this.buildPeerTubeHelpers({
         pluginInfo,
         translations
-      })
+      }),
+      backendUrl: getBackendUrl()
     })
 
     this.pluginsManager.loadPluginsList(config)
@@ -54,6 +56,8 @@ export class PeerTubePlugin {
           .then((obj: PublicServerSetting) => obj.publicSettings)
       },
 
+      getUser: unimplemented,
+
       isLoggedIn: () => this.http.isLoggedIn(),
       getAuthHeader: () => {
         if (!this.http.isLoggedIn()) return undefined
@@ -81,6 +85,6 @@ export class PeerTubePlugin {
   }
 
   private getPluginUrl () {
-    return window.location.origin + '/api/v1/plugins'
+    return getBackendUrl() + '/api/v1/plugins'
   }
 }

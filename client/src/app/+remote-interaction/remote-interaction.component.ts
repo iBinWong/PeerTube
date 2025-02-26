@@ -1,21 +1,23 @@
-import { forkJoin } from 'rxjs'
-import { Component, OnInit } from '@angular/core'
+import { NgIf } from '@angular/common'
+import { Component, OnInit, inject } from '@angular/core'
 import { ActivatedRoute, Router } from '@angular/router'
-import { Video, VideoChannel } from '@app/shared/shared-main'
-import { SearchService } from '@app/shared/shared-search'
+import { VideoChannel } from '@app/shared/shared-main/channel/video-channel.model'
+import { AlertComponent } from '@app/shared/shared-main/common/alert.component'
+import { Video } from '@app/shared/shared-main/video/video.model'
+import { SearchService } from '@app/shared/shared-search/search.service'
+import { forkJoin } from 'rxjs'
 
 @Component({
   selector: 'my-remote-interaction',
-  templateUrl: './remote-interaction.component.html'
+  templateUrl: './remote-interaction.component.html',
+  imports: [ NgIf, AlertComponent ]
 })
 export class RemoteInteractionComponent implements OnInit {
-  error = ''
+  private route = inject(ActivatedRoute)
+  private router = inject(Router)
+  private search = inject(SearchService)
 
-  constructor (
-    private route: ActivatedRoute,
-    private router: Router,
-    private search: SearchService
-  ) { }
+  error = ''
 
   ngOnInit () {
     const uri = this.route.snapshot.queryParams['uri']
@@ -51,5 +53,4 @@ export class RemoteInteractionComponent implements OnInit {
       this.router.navigateByUrl(redirectUrl)
     })
   }
-
 }

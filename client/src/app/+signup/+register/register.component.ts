@@ -1,21 +1,56 @@
-import { CdkStep } from '@angular/cdk/stepper'
-import { Component, OnInit, ViewChild } from '@angular/core'
+import { CdkStep, CdkStepperNext, CdkStepperPrevious } from '@angular/cdk/stepper'
+import { NgIf } from '@angular/common'
+import { Component, OnInit, inject, viewChild } from '@angular/core'
 import { FormGroup } from '@angular/forms'
-import { ActivatedRoute } from '@angular/router'
-import { AuthService } from '@app/core'
+import { ActivatedRoute, RouterLink } from '@angular/router'
+import { AuthService, ServerService } from '@app/core'
 import { HooksService } from '@app/core/plugins/hooks.service'
-import { InstanceAboutAccordionComponent } from '@app/shared/shared-instance'
-import { ServerConfig, UserRegister } from '@peertube/peertube-models'
+import { InstanceAboutAccordionComponent } from '@app/shared/shared-instance/instance-about-accordion.component'
+import { AlertComponent } from '@app/shared/shared-main/common/alert.component'
+import { PeerTubeProblemDocument, ServerConfig, ServerStats, UserRegister } from '@peertube/peertube-models'
+import { LoaderComponent } from '../../shared/shared-main/common/loader.component'
+import { SignupLabelComponent } from '../../shared/shared-main/users/signup-label.component'
+import { SignupStepTitleComponent } from '../shared/signup-step-title.component'
+import { SignupSuccessBeforeEmailComponent } from '../shared/signup-success-before-email.component'
 import { SignupService } from '../shared/signup.service'
+import { CustomStepperComponent } from './custom-stepper.component'
+import { RegisterStepAboutComponent } from './steps/register-step-about.component'
+import { RegisterStepChannelComponent } from './steps/register-step-channel.component'
+import { RegisterStepTermsComponent } from './steps/register-step-terms.component'
+import { RegisterStepUserComponent } from './steps/register-step-user.component'
 
 @Component({
   selector: 'my-register',
   templateUrl: './register.component.html',
-  styleUrls: [ './register.component.scss' ]
+  styleUrls: [ './register.component.scss' ],
+  imports: [
+    NgIf,
+    SignupLabelComponent,
+    CustomStepperComponent,
+    CdkStep,
+    SignupStepTitleComponent,
+    RegisterStepAboutComponent,
+    RouterLink,
+    CdkStepperNext,
+    InstanceAboutAccordionComponent,
+    RegisterStepTermsComponent,
+    CdkStepperPrevious,
+    RegisterStepUserComponent,
+    RegisterStepChannelComponent,
+    LoaderComponent,
+    SignupSuccessBeforeEmailComponent,
+    AlertComponent
+  ]
 })
 export class RegisterComponent implements OnInit {
-  @ViewChild('lastStep') lastStep: CdkStep
-  @ViewChild('instanceAboutAccordion') instanceAboutAccordion: InstanceAboutAccordionComponent
+  private route = inject(ActivatedRoute)
+  private authService = inject(AuthService)
+  private signupService = inject(SignupService)
+  private server = inject(ServerService)
+  private hooks = inject(HooksService)
+
+  readonly lastStep = viewChild<CdkStep>('lastStep')
+  readonly instanceAboutAccordion = viewChild<InstanceAboutAccordionComponent>('instanceAboutAccordion')
 
   signupError: string
   signupSuccess = false
@@ -45,14 +80,9 @@ export class RegisterComponent implements OnInit {
 
   signupDisabled = false
 
-  private serverConfig: ServerConfig
+  serverStats: ServerStats
 
-  constructor (
-    private route: ActivatedRoute,
-    private authService: AuthService,
-    private signupService: SignupService,
-    private hooks: HooksService
-  ) { }
+  private serverConfig: ServerConfig
 
   get requiresEmailVerification () {
     return this.serverConfig.signup.requiresEmailVerification
@@ -85,8 +115,10 @@ export class RegisterComponent implements OnInit {
       ? $localize`:Button on the registration form to finalize the account and channel creation:Signup`
       : this.defaultNextStepButtonLabel
 
-    this.hooks.runAction('action:signup.register.init', 'signup')
+    this.server.getServerStats()
+      .subscribe(stats => this.serverStats = stats)
 
+    this.hooks.runAction('action:signup.register.init', 'signup')
   }
 
   hasSameChannelAndAccountNames () {
@@ -118,11 +150,11 @@ export class RegisterComponent implements OnInit {
   }
 
   onTermsClick () {
-    this.instanceAboutAccordion.expandTerms()
+    this.instanceAboutAccordion().expandTerms()
   }
 
   onCodeOfConductClick () {
-    this.instanceAboutAccordion.expandCodeOfConduct()
+    this.instanceAboutAccordion().expandCodeOfConduct()
   }
 
   onInstanceAboutAccordionInit (instanceAboutAccordion: InstanceAboutAccordionComponent) {
@@ -131,7 +163,7 @@ export class RegisterComponent implements OnInit {
 
   skipChannelCreation () {
     this.formStepChannel.reset()
-    this.lastStep.select()
+    this.lastStep().select()
 
     this.signup()
   }
@@ -178,7 +210,7 @@ export class RegisterComponent implements OnInit {
       },
 
       error: err => {
-        this.signupError = err.message
+        this.signupError = (err.body as PeerTubeProblemDocument)?.detail || err.message
       }
     })
   }

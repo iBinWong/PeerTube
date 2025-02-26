@@ -10,7 +10,7 @@ if (!key) throw new Error('Miss browser stack key')
 function buildMainOptions (sessionName: string) {
   return {
     projectName: 'PeerTube',
-    buildName: 'Main E2E - ' + new Date().toISOString().split('T')[0],
+    buildName: 'Main E2E - ' + new Date().toISOString(),
     sessionName,
     consoleLogs: 'info',
     networkLogs: true
@@ -71,13 +71,13 @@ module.exports = {
       },
       {
         browserName: 'Firefox',
-        browserVersion: '78', // Very old ESR
+        browserVersion: '79', // Oldest supported version
 
         ...buildBStackDesktopOptions({ sessionName: 'Firefox ESR Desktop', resolution: '1280x1024', os: 'Windows', osVersion: '8' })
       },
       {
         browserName: 'Safari',
-        browserVersion: '12.1',
+        browserVersion: '14',
 
         ...buildBStackDesktopOptions({ sessionName: 'Safari Desktop', resolution: '1280x1024' })
       },
@@ -100,12 +100,13 @@ module.exports = {
       {
         browserName: 'Safari',
 
-        ...buildBStackMobileOptions({ sessionName: 'Safari iPhone', deviceName: 'iPhone 8 Plus', osVersion: '12.4' })
+        ...buildBStackMobileOptions({ sessionName: 'Safari iPhone', deviceName: 'iPhone 11', osVersion: '14' })
       },
+
       {
         browserName: 'Safari',
 
-        ...buildBStackMobileOptions({ sessionName: 'Safari iPad', deviceName: 'iPad 7th', osVersion: '13' })
+        ...buildBStackMobileOptions({ sessionName: 'Safari iPad', deviceName: 'iPad Pro 11 2020', osVersion: '14' })
       }
     ],
 
@@ -127,6 +128,47 @@ module.exports = {
     onWorkerStart: function (_cid, capabilities) {
       if (capabilities['bstack:options'].realMobile === true) {
         capabilities['bstack:options'].local = false
+      }
+    },
+
+    before: function () {
+      require('./src/commands/upload')
+
+      // Force keep alive: https://www.browserstack.com/docs/automate/selenium/error-codes/keep-alive-not-used#Node_JS
+      const http = require('http')
+      const https = require('https')
+
+      const keepAliveTimeout = 30 * 1000
+
+      // eslint-disable-next-line no-prototype-builtins
+      if (http.globalAgent?.hasOwnProperty('keepAlive')) {
+        http.globalAgent.keepAlive = true
+        https.globalAgent.keepAlive = true
+        http.globalAgent.keepAliveMsecs = keepAliveTimeout
+        https.globalAgent.keepAliveMsecs = keepAliveTimeout
+      } else {
+        const agent = new http.Agent({
+          keepAlive: true,
+          keepAliveMsecs: keepAliveTimeout
+        })
+
+        const secureAgent = new https.Agent({
+          keepAlive: true,
+          keepAliveMsecs: keepAliveTimeout
+        })
+
+        const httpRequest = http.request
+        const httpsRequest = https.request
+
+        http.request = function (options, callback) {
+          if (options.protocol === 'https:') {
+            options['agent'] = secureAgent
+            return httpsRequest(options, callback)
+          } else {
+            options['agent'] = agent
+            return httpRequest(options, callback)
+          }
+        }
       }
     },
 

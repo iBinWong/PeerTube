@@ -1,5 +1,5 @@
-import { randomInt } from 'crypto'
 import { HttpStatusCode } from '@peertube/peertube-models'
+import { randomInt } from 'crypto'
 import { makePostBodyRequest } from '../requests/index.js'
 
 export class ObjectStorageCommand {
@@ -29,7 +29,12 @@ export class ObjectStorageCommand {
     return 'us-east-1'
   }
 
-  getDefaultMockConfig () {
+  getDefaultMockConfig (options: {
+    storeLiveStreams?: boolean // default true
+    proxifyPrivateFiles?: boolean // default true
+  } = {}) {
+    const { storeLiveStreams = true, proxifyPrivateFiles = true } = options
+
     return {
       object_storage: {
         enabled: true,
@@ -39,11 +44,29 @@ export class ObjectStorageCommand {
         credentials: ObjectStorageCommand.getMockCredentialsConfig(),
 
         streaming_playlists: {
-          bucket_name: this.getMockStreamingPlaylistsBucketName()
+          bucket_name: this.getMockStreamingPlaylistsBucketName(),
+
+          store_live_streams: storeLiveStreams
         },
 
         web_videos: {
           bucket_name: this.getMockWebVideosBucketName()
+        },
+
+        user_exports: {
+          bucket_name: this.getMockUserExportBucketName()
+        },
+
+        original_video_files: {
+          bucket_name: this.getMockOriginalFileBucketName()
+        },
+
+        captions: {
+          bucket_name: this.getMockCaptionsBucketName()
+        },
+
+        proxy: {
+          proxify_private_files: proxifyPrivateFiles
         }
       }
     }
@@ -57,9 +80,24 @@ export class ObjectStorageCommand {
     return `http://${this.getMockStreamingPlaylistsBucketName()}.${ObjectStorageCommand.getMockEndpointHost()}/`
   }
 
+  getMockUserExportBaseUrl () {
+    return `http://${this.getMockUserExportBucketName()}.${ObjectStorageCommand.getMockEndpointHost()}/`
+  }
+
+  getMockOriginalFileBaseUrl () {
+    return `http://${this.getMockOriginalFileBucketName()}.${ObjectStorageCommand.getMockEndpointHost()}/`
+  }
+
+  getMockCaptionFileBaseUrl () {
+    return `http://${this.getMockCaptionsBucketName()}.${ObjectStorageCommand.getMockEndpointHost()}/`
+  }
+
   async prepareDefaultMockBuckets () {
     await this.createMockBucket(this.getMockStreamingPlaylistsBucketName())
     await this.createMockBucket(this.getMockWebVideosBucketName())
+    await this.createMockBucket(this.getMockOriginalFileBucketName())
+    await this.createMockBucket(this.getMockUserExportBucketName())
+    await this.createMockBucket(this.getMockCaptionsBucketName())
   }
 
   async createMockBucket (name: string) {
@@ -91,6 +129,18 @@ export class ObjectStorageCommand {
   }
 
   getMockWebVideosBucketName (name = 'web-videos') {
+    return this.getMockBucketName(name)
+  }
+
+  getMockUserExportBucketName (name = 'user-exports') {
+    return this.getMockBucketName(name)
+  }
+
+  getMockOriginalFileBucketName (name = 'original-video-files') {
+    return this.getMockBucketName(name)
+  }
+
+  getMockCaptionsBucketName (name = 'captions') {
     return this.getMockBucketName(name)
   }
 

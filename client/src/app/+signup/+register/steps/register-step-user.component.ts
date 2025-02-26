@@ -1,7 +1,6 @@
-import { concat, of } from 'rxjs'
-import { pairwise } from 'rxjs/operators'
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core'
-import { FormGroup } from '@angular/forms'
+import { NgClass, NgIf } from '@angular/common'
+import { Component, OnInit, inject, input, output } from '@angular/core'
+import { FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { SignupService } from '@app/+signup/shared/signup.service'
 import {
   USER_DISPLAY_NAME_REQUIRED_VALIDATOR,
@@ -9,25 +8,27 @@ import {
   USER_PASSWORD_VALIDATOR,
   USER_USERNAME_VALIDATOR
 } from '@app/shared/form-validators/user-validators'
-import { FormReactive, FormReactiveService } from '@app/shared/shared-forms'
+import { FormReactive } from '@app/shared/shared-forms/form-reactive'
+import { FormReactiveService } from '@app/shared/shared-forms/form-reactive.service'
+import { AlertComponent } from '@app/shared/shared-main/common/alert.component'
+import { concat, of } from 'rxjs'
+import { pairwise } from 'rxjs/operators'
+import { InputTextComponent } from '../../../shared/shared-forms/input-text.component'
 
 @Component({
   selector: 'my-register-step-user',
   templateUrl: './register-step-user.component.html',
-  styleUrls: [ './step.component.scss' ]
+  styleUrls: [ './step.component.scss' ],
+  imports: [ NgIf, FormsModule, ReactiveFormsModule, NgClass, InputTextComponent, AlertComponent ]
 })
 export class RegisterStepUserComponent extends FormReactive implements OnInit {
-  @Input() videoUploadDisabled = false
-  @Input() requiresEmailVerification = false
+  protected formReactiveService = inject(FormReactiveService)
+  private signupService = inject(SignupService)
 
-  @Output() formBuilt = new EventEmitter<FormGroup>()
+  readonly videoUploadDisabled = input(false)
+  readonly requiresEmailVerification = input(false)
 
-  constructor (
-    protected formReactiveService: FormReactiveService,
-    private signupService: SignupService
-  ) {
-    super()
-  }
+  readonly formBuilt = output<FormGroup>()
 
   get instanceHost () {
     return window.location.host
@@ -47,7 +48,7 @@ export class RegisterStepUserComponent extends FormReactive implements OnInit {
       of(''),
       this.form.get('displayName').valueChanges
     ).pipe(pairwise())
-     .subscribe(([ oldValue, newValue ]) => this.onDisplayNameChange(oldValue, newValue))
+      .subscribe(([ oldValue, newValue ]) => this.onDisplayNameChange(oldValue, newValue))
   }
 
   getMinPasswordLengthMessage () {

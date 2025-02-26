@@ -1,38 +1,40 @@
 import { forkJoin } from 'rxjs'
-import { Component, EventEmitter, OnInit, Output, ViewChild } from '@angular/core'
+import { Component, OnInit, inject, output, viewChild } from '@angular/core'
 import { Notifier } from '@app/core'
 import { formatICU } from '@app/helpers'
-import { FormReactive, FormReactiveService } from '@app/shared/shared-forms'
+import { FormReactive } from '@app/shared/shared-forms/form-reactive'
+import { FormReactiveService } from '@app/shared/shared-forms/form-reactive.service'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap/modal/modal-ref'
 import { User } from '@peertube/peertube-models'
 import { USER_BAN_REASON_VALIDATOR } from '../form-validators/user-validators'
-import { Account } from '../shared-main'
-import { UserAdminService } from '../shared-users'
+import { Account } from '../shared-main/account/account.model'
 import { BlocklistService } from './blocklist.service'
+import { PeertubeCheckboxComponent } from '../shared-forms/peertube-checkbox.component'
+import { NgClass, NgIf } from '@angular/common'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { GlobalIconComponent } from '../shared-icons/global-icon.component'
+import { UserAdminService } from '../shared-users/user-admin.service'
 
 @Component({
   selector: 'my-user-ban-modal',
   templateUrl: './user-ban-modal.component.html',
-  styleUrls: [ './user-ban-modal.component.scss' ]
+  styleUrls: [ './user-ban-modal.component.scss' ],
+  imports: [ GlobalIconComponent, FormsModule, ReactiveFormsModule, NgClass, NgIf, PeertubeCheckboxComponent ]
 })
 export class UserBanModalComponent extends FormReactive implements OnInit {
-  @ViewChild('modal', { static: true }) modal: NgbModal
-  @Output() userBanned = new EventEmitter<User | User[]>()
+  protected formReactiveService = inject(FormReactiveService)
+  private modalService = inject(NgbModal)
+  private notifier = inject(Notifier)
+  private userAdminService = inject(UserAdminService)
+  private blocklistService = inject(BlocklistService)
+
+  readonly modal = viewChild<NgbModal>('modal')
+  readonly userBanned = output<User | User[]>()
 
   private usersToBan: User | User[]
   private openedModal: NgbModalRef
   modalMessage = ''
-
-  constructor (
-    protected formReactiveService: FormReactiveService,
-    private modalService: NgbModal,
-    private notifier: Notifier,
-    private userAdminService: UserAdminService,
-    private blocklistService: BlocklistService
-  ) {
-    super()
-  }
 
   ngOnInit () {
     this.buildForm({
@@ -43,7 +45,7 @@ export class UserBanModalComponent extends FormReactive implements OnInit {
 
   openModal (user: User | User[]) {
     this.usersToBan = user
-    this.openedModal = this.modalService.open(this.modal, { centered: true })
+    this.openedModal = this.modalService.open(this.modal(), { centered: true })
   }
 
   hide () {

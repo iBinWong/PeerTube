@@ -1,11 +1,8 @@
-import { SortMeta } from 'primeng/api'
-import { from, Observable, of, throwError } from 'rxjs'
-import { catchError, concatMap, map, switchMap, toArray } from 'rxjs/operators'
 import { HttpClient, HttpParams, HttpRequest } from '@angular/common/http'
-import { Injectable } from '@angular/core'
+import { Injectable, inject } from '@angular/core'
 import { AuthService, ComponentPaginationLight, ConfirmService, RestExtractor, RestService, ServerService, UserService } from '@app/core'
 import { objectToFormData } from '@app/helpers'
-import { arrayify } from '@peertube/peertube-core-utils'
+import { arrayify, buildDownloadFilesUrl } from '@peertube/peertube-core-utils'
 import {
   BooleanBothQuery,
   FeedFormat,
@@ -16,23 +13,28 @@ import {
   UserVideoRate,
   UserVideoRateType,
   UserVideoRateUpdate,
-  Video as VideoServerModel,
   VideoChannel as VideoChannelServerModel,
   VideoConstant,
   VideoDetails as VideoDetailsServerModel,
+  VideoFile,
   VideoFileMetadata,
   VideoIncludeType,
   VideoPrivacy,
   VideoPrivacyType,
+  Video as VideoServerModel,
   VideoSortField,
   VideoSource,
   VideoTranscodingCreate,
   VideoUpdate
 } from '@peertube/peertube-models'
+import { SortMeta } from 'primeng/api'
+import { from, Observable, of, throwError } from 'rxjs'
+import { catchError, concatMap, map, switchMap, toArray } from 'rxjs/operators'
 import { environment } from '../../../../environments/environment'
 import { Account } from '../account/account.model'
 import { AccountService } from '../account/account.service'
-import { VideoChannel, VideoChannelService } from '../video-channel'
+import { VideoChannel } from '../channel/video-channel.model'
+import { VideoChannelService } from '../channel/video-channel.service'
 import { VideoDetails } from './video-details.model'
 import { VideoEdit } from './video-edit.model'
 import { VideoPasswordService } from './video-password.service'
@@ -49,23 +51,23 @@ export type CommonVideoParams = {
   isLive?: boolean
   skipCount?: boolean
   nsfw?: BooleanBothQuery
+  host?: string
+  search?: string
 }
 
 @Injectable()
 export class VideoService {
+  private auth = inject(AuthService)
+  private authHttp = inject(HttpClient)
+  private restExtractor = inject(RestExtractor)
+  private restService = inject(RestService)
+  private serverService = inject(ServerService)
+  private confirmService = inject(ConfirmService)
+
   static BASE_VIDEO_URL = environment.apiUrl + '/api/v1/videos'
   static BASE_FEEDS_URL = environment.apiUrl + '/feeds/videos.'
   static PODCAST_FEEDS_URL = environment.apiUrl + '/feeds/podcast/videos.xml'
   static BASE_SUBSCRIPTION_FEEDS_URL = environment.apiUrl + '/feeds/subscriptions.'
-
-  constructor (
-    private auth: AuthService,
-    private authHttp: HttpClient,
-    private restExtractor: RestExtractor,
-    private restService: RestService,
-    private serverService: ServerService,
-    private confirmService: ConfirmService
-  ) {}
 
   getVideoViewUrl (uuid: string) {
     return `${VideoService.BASE_VIDEO_URL}/${uuid}/views`
@@ -108,7 +110,7 @@ export class VideoService {
       tags: video.tags,
       nsfw: video.nsfw,
       waitTranscoding: video.waitTranscoding,
-      commentsEnabled: video.commentsEnabled,
+      commentsPolicy: video.commentsPolicy,
       downloadEnabled: video.downloadEnabled,
       thumbnailfile: video.thumbnailfile,
       previewfile: video.previewfile,
@@ -120,15 +122,15 @@ export class VideoService {
     const data = objectToFormData(body)
 
     return this.authHttp.put(`${VideoService.BASE_VIDEO_URL}/${video.id}`, data)
-               .pipe(catchError(err => this.restExtractor.handleError(err)))
+      .pipe(catchError(err => this.restExtractor.handleError(err)))
   }
 
   uploadVideo (video: FormData) {
     const req = new HttpRequest('POST', `${VideoService.BASE_VIDEO_URL}/upload`, video, { reportProgress: true })
 
     return this.authHttp
-               .request<{ video: { id: number, uuid: string } }>(req)
-               .pipe(catchError(err => this.restExtractor.handleError(err)))
+      .request<{ video: { id: number, uuid: string } }>(req)
+      .pipe(catchError(err => this.restExtractor.handleError(err)))
   }
 
   getMyVideos (options: {
@@ -166,46 +168,47 @@ export class VideoService {
     }
 
     return this.authHttp
-               .get<ResultList<Video>>(UserService.BASE_USERS_URL + 'me/videos', { params })
-               .pipe(
-                 switchMap(res => this.extractVideos(res)),
-                 catchError(err => this.restExtractor.handleError(err))
-               )
+      .get<ResultList<Video>>(UserService.BASE_USERS_URL + 'me/videos', { params })
+      .pipe(
+        switchMap(res => this.extractVideos(res)),
+        catchError(err => this.restExtractor.handleError(err))
+      )
   }
 
-  getAccountVideos (parameters: CommonVideoParams & {
-    account: Pick<Account, 'nameWithHost'>
-    search?: string
-  }): Observable<ResultList<Video>> {
-    const { account, search } = parameters
+  getAccountVideos (
+    parameters: CommonVideoParams & {
+      account: Pick<Account, 'nameWithHost'>
+    }
+  ): Observable<ResultList<Video>> {
+    const { account } = parameters
 
     let params = new HttpParams()
     params = this.buildCommonVideosParams({ params, ...parameters })
 
-    if (search) params = params.set('search', search)
-
     return this.authHttp
-               .get<ResultList<Video>>(AccountService.BASE_ACCOUNT_URL + account.nameWithHost + '/videos', { params })
-               .pipe(
-                 switchMap(res => this.extractVideos(res)),
-                 catchError(err => this.restExtractor.handleError(err))
-               )
+      .get<ResultList<Video>>(AccountService.BASE_ACCOUNT_URL + account.nameWithHost + '/videos', { params })
+      .pipe(
+        switchMap(res => this.extractVideos(res)),
+        catchError(err => this.restExtractor.handleError(err))
+      )
   }
 
-  getVideoChannelVideos (parameters: CommonVideoParams & {
-    videoChannel: Pick<VideoChannel, 'nameWithHost'>
-  }): Observable<ResultList<Video>> {
+  getVideoChannelVideos (
+    parameters: CommonVideoParams & {
+      videoChannel: Pick<VideoChannel, 'nameWithHost'>
+    }
+  ): Observable<ResultList<Video>> {
     const { videoChannel } = parameters
 
     let params = new HttpParams()
     params = this.buildCommonVideosParams({ params, ...parameters })
 
     return this.authHttp
-               .get<ResultList<Video>>(VideoChannelService.BASE_VIDEO_CHANNEL_URL + videoChannel.nameWithHost + '/videos', { params })
-               .pipe(
-                 switchMap(res => this.extractVideos(res)),
-                 catchError(err => this.restExtractor.handleError(err))
-               )
+      .get<ResultList<Video>>(VideoChannelService.BASE_VIDEO_CHANNEL_URL + videoChannel.nameWithHost + '/videos', { params })
+      .pipe(
+        switchMap(res => this.extractVideos(res)),
+        catchError(err => this.restExtractor.handleError(err))
+      )
   }
 
   getVideos (parameters: CommonVideoParams): Observable<ResultList<Video>> {
@@ -213,11 +216,11 @@ export class VideoService {
     params = this.buildCommonVideosParams({ params, ...parameters })
 
     return this.authHttp
-               .get<ResultList<Video>>(VideoService.BASE_VIDEO_URL, { params })
-               .pipe(
-                 switchMap(res => this.extractVideos(res)),
-                 catchError(err => this.restExtractor.handleError(err))
-               )
+      .get<ResultList<Video>>(VideoService.BASE_VIDEO_URL, { params })
+      .pipe(
+        switchMap(res => this.extractVideos(res)),
+        catchError(err => this.restExtractor.handleError(err))
+      )
   }
 
   buildBaseFeedUrls (params: HttpParams, base = VideoService.BASE_FEEDS_URL) {
@@ -294,10 +297,10 @@ export class VideoService {
 
   getVideoFileMetadata (metadataUrl: string) {
     return this.authHttp
-               .get<VideoFileMetadata>(metadataUrl)
-               .pipe(
-                 catchError(err => this.restExtractor.handleError(err))
-               )
+      .get<VideoFileMetadata>(metadataUrl)
+      .pipe(
+        catchError(err => this.restExtractor.handleError(err))
+      )
   }
 
   removeVideo (idArg: number | number[]) {
@@ -325,28 +328,28 @@ export class VideoService {
       .pipe(catchError(err => this.restExtractor.handleError(err)))
   }
 
+  removeSourceFile (videoId: number | string) {
+    return this.authHttp.delete(VideoService.BASE_VIDEO_URL + '/' + videoId + '/source/file')
+      .pipe(catchError(err => this.restExtractor.handleError(err)))
+  }
+
   runTranscoding (options: {
-    videoIds: (number | string)[]
+    videos: Video[]
     type: 'hls' | 'web-video'
-    askForForceTranscodingIfNeeded: boolean
     forceTranscoding?: boolean
   }): Observable<any> {
-    const { videoIds, type, askForForceTranscodingIfNeeded, forceTranscoding } = options
-
-    if (askForForceTranscodingIfNeeded && videoIds.length !== 1) {
-      throw new Error('Cannot ask to force transcoding on multiple videos')
-    }
+    const { videos, type, forceTranscoding } = options
 
     const body: VideoTranscodingCreate = { transcodingType: type, forceTranscoding }
 
-    return from(videoIds)
+    return from(videos)
       .pipe(
-        concatMap(id => {
-          return this.authHttp.post(VideoService.BASE_VIDEO_URL + '/' + id + '/transcoding', body)
+        concatMap(video => {
+          return this.authHttp.post(VideoService.BASE_VIDEO_URL + '/' + video.uuid + '/transcoding', body)
             .pipe(
               catchError(err => {
-                if (askForForceTranscodingIfNeeded && err.error?.code === ServerErrorCode.VIDEO_ALREADY_BEING_TRANSCODED) {
-                  const message = $localize`PeerTube considers this video is already being transcoded.` +
+                if (err.error?.code === ServerErrorCode.VIDEO_ALREADY_BEING_TRANSCODED && !forceTranscoding) {
+                  const message = $localize`PeerTube considers video "${video.name}" is already being transcoded.` +
                     // eslint-disable-next-line max-len
                     $localize` If you think PeerTube is wrong (video in broken state after a crash etc.), you can force transcoding on this video.` +
                     ` Do you still want to run transcoding?`
@@ -356,7 +359,11 @@ export class VideoService {
                       switchMap(res => {
                         if (res === false) return throwError(() => err)
 
-                        return this.runTranscoding({ videoIds, type, askForForceTranscodingIfNeeded: false, forceTranscoding: true })
+                        return this.runTranscoding({
+                          videos: [ video ],
+                          type,
+                          forceTranscoding: true
+                        })
                       })
                     )
                 }
@@ -372,13 +379,19 @@ export class VideoService {
 
   // ---------------------------------------------------------------------------
 
-  loadCompleteDescription (descriptionPath: string) {
-    return this.authHttp
-               .get<{ description: string }>(environment.apiUrl + descriptionPath)
-               .pipe(
-                 map(res => res.description),
-                 catchError(err => this.restExtractor.handleError(err))
-               )
+  generateDownloadUrl (options: {
+    video: Video
+    files: VideoFile[]
+    videoFileToken?: string
+  }) {
+    const { video, files, videoFileToken } = options
+
+    return buildDownloadFilesUrl({
+      baseUrl: environment.originServerUrl,
+      videoFiles: files.map(f => f.id),
+      videoUUID: video.uuid,
+      videoFileToken
+    })
   }
 
   // ---------------------------------------------------------------------------
@@ -395,7 +408,7 @@ export class VideoService {
             return of([])
           }
 
-          this.restExtractor.handleError(err)
+          return this.restExtractor.handleError(err)
         })
       )
   }
@@ -404,16 +417,16 @@ export class VideoService {
 
   getSource (videoId: number) {
     return this.authHttp
-               .get<{ source: VideoSource }>(VideoService.BASE_VIDEO_URL + '/' + videoId + '/source')
-               .pipe(
-                 catchError(err => {
-                   if (err.status === 404) {
-                     return of(undefined)
-                   }
+      .get<VideoSource>(VideoService.BASE_VIDEO_URL + '/' + videoId + '/source')
+      .pipe(
+        catchError(err => {
+          if (err.status === 404) {
+            return of(undefined)
+          }
 
-                   this.restExtractor.handleError(err)
-                 })
-               )
+          return this.restExtractor.handleError(err)
+        })
+      )
   }
 
   // ---------------------------------------------------------------------------
@@ -436,24 +449,24 @@ export class VideoService {
     const url = UserService.BASE_USERS_URL + 'me/videos/' + id + '/rating'
 
     return this.authHttp.get<UserVideoRate>(url)
-               .pipe(catchError(err => this.restExtractor.handleError(err)))
+      .pipe(catchError(err => this.restExtractor.handleError(err)))
   }
 
   extractVideos (result: ResultList<VideoServerModel>) {
     return this.serverService.getServerLocale()
-               .pipe(
-                 map(translations => {
-                   const videosJson = result.data
-                   const totalVideos = result.total
-                   const videos: Video[] = []
+      .pipe(
+        map(translations => {
+          const videosJson = result.data
+          const totalVideos = result.total
+          const videos: Video[] = []
 
-                   for (const videoJson of videosJson) {
-                     videos.push(new Video(videoJson, translations))
-                   }
+          for (const videoJson of videosJson) {
+            videos.push(new Video(videoJson, translations))
+          }
 
-                   return { total: totalVideos, data: videos }
-                 })
-               )
+          return { total: totalVideos, data: videos }
+        })
+      )
   }
 
   explainedPrivacyLabels (serverPrivacies: VideoConstant<VideoPrivacyType>[], defaultPrivacyId: VideoPrivacyType = VideoPrivacy.PUBLIC) {
@@ -461,7 +474,7 @@ export class VideoService {
       [VideoPrivacy.PRIVATE]: $localize`Only I can see this video`,
       [VideoPrivacy.UNLISTED]: $localize`Only shareable via a private link`,
       [VideoPrivacy.PUBLIC]: $localize`Anyone can see this video`,
-      [VideoPrivacy.INTERNAL]: $localize`Only users of this instance can see this video`,
+      [VideoPrivacy.INTERNAL]: $localize`Only users of this platform can see this video`,
       [VideoPrivacy.PASSWORD_PROTECTED]: $localize`Only users with the appropriate password can see this video`
     }
 
@@ -533,7 +546,11 @@ export class VideoService {
       privacyOneOf,
       skipCount,
       isLive,
-      nsfw
+      nsfw,
+      search,
+      host,
+
+      ...otherOptions
     } = options
 
     const pagination = videoPagination
@@ -551,6 +568,10 @@ export class VideoService {
     if (languageOneOf !== undefined) newParams = this.restService.addArrayParams(newParams, 'languageOneOf', languageOneOf)
     if (categoryOneOf !== undefined) newParams = this.restService.addArrayParams(newParams, 'categoryOneOf', categoryOneOf)
     if (privacyOneOf !== undefined) newParams = this.restService.addArrayParams(newParams, 'privacyOneOf', privacyOneOf)
+    if (search) newParams = newParams.set('search', search)
+    if (host) newParams = newParams.set('host', host)
+
+    newParams = this.restService.addObjectParams(newParams, otherOptions)
 
     return newParams
   }
@@ -579,7 +600,7 @@ export class VideoService {
     const headers = VideoPasswordService.buildVideoPasswordHeader(videoPassword)
 
     return this.authHttp
-               .put(url, body, { headers })
-               .pipe(catchError(err => this.restExtractor.handleError(err)))
+      .put(url, body, { headers })
+      .pipe(catchError(err => this.restExtractor.handleError(err)))
   }
 }

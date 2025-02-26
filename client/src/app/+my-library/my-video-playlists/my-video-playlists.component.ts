@@ -1,15 +1,41 @@
+import { NgFor, NgIf } from '@angular/common'
+import { Component, inject } from '@angular/core'
+import { RouterLink } from '@angular/router'
+import { AuthService, ComponentPagination, ConfirmService, Notifier, resetCurrentPage, updatePaginationOnDelete } from '@app/core'
+import { formatICU } from '@app/helpers'
+import { VideoPlaylist } from '@app/shared/shared-video-playlist/video-playlist.model'
+import { VideoPlaylistService } from '@app/shared/shared-video-playlist/video-playlist.service'
+import { VideoPlaylistType } from '@peertube/peertube-models'
 import { Subject } from 'rxjs'
 import { mergeMap } from 'rxjs/operators'
-import { Component } from '@angular/core'
-import { AuthService, ComponentPagination, ConfirmService, Notifier } from '@app/core'
-import { VideoPlaylist, VideoPlaylistService } from '@app/shared/shared-video-playlist'
-import { VideoPlaylistType } from '@peertube/peertube-models'
+import { AdvancedInputFilterComponent } from '../../shared/shared-forms/advanced-input-filter.component'
+import { GlobalIconComponent } from '../../shared/shared-icons/global-icon.component'
+import { DeleteButtonComponent } from '../../shared/shared-main/buttons/delete-button.component'
+import { EditButtonComponent } from '../../shared/shared-main/buttons/edit-button.component'
+import { InfiniteScrollerDirective } from '../../shared/shared-main/common/infinite-scroller.directive'
+import { VideoPlaylistMiniatureComponent } from '../../shared/shared-video-playlist/video-playlist-miniature.component'
 
 @Component({
   templateUrl: './my-video-playlists.component.html',
-  styleUrls: [ './my-video-playlists.component.scss' ]
+  styleUrls: [ './my-video-playlists.component.scss' ],
+  imports: [
+    GlobalIconComponent,
+    NgIf,
+    AdvancedInputFilterComponent,
+    RouterLink,
+    InfiniteScrollerDirective,
+    NgFor,
+    VideoPlaylistMiniatureComponent,
+    DeleteButtonComponent,
+    EditButtonComponent
+  ]
 })
 export class MyVideoPlaylistsComponent {
+  private authService = inject(AuthService)
+  private notifier = inject(Notifier)
+  private confirmService = inject(ConfirmService)
+  private videoPlaylistService = inject(VideoPlaylistService)
+
   videoPlaylists: VideoPlaylist[] = []
 
   pagination: ComponentPagination = {
@@ -22,13 +48,6 @@ export class MyVideoPlaylistsComponent {
 
   search: string
 
-  constructor (
-    private authService: AuthService,
-    private notifier: Notifier,
-    private confirmService: ConfirmService,
-    private videoPlaylistService: VideoPlaylistService
-  ) {}
-
   async deleteVideoPlaylist (videoPlaylist: VideoPlaylist) {
     const res = await this.confirmService.confirm(
       $localize`Do you really want to delete ${videoPlaylist.displayName}?`,
@@ -39,8 +58,8 @@ export class MyVideoPlaylistsComponent {
     this.videoPlaylistService.removeVideoPlaylist(videoPlaylist)
       .subscribe({
         next: () => {
-          this.videoPlaylists = this.videoPlaylists
-                                    .filter(p => p.id !== videoPlaylist.id)
+          this.videoPlaylists = this.videoPlaylists.filter(p => p.id !== videoPlaylist.id)
+          updatePaginationOnDelete(this.pagination)
 
           this.notifier.success($localize`Playlist ${videoPlaylist.displayName} deleted.`)
         },
@@ -63,22 +82,31 @@ export class MyVideoPlaylistsComponent {
 
   onSearch (search: string) {
     this.search = search
+    resetCurrentPage(this.pagination)
+
     this.loadVideoPlaylists(true)
+  }
+
+  getTotalTitle () {
+    return formatICU(
+      $localize`${this.pagination.totalItems} {total, plural, =1 {playlist} other {playlists}}`,
+      { total: this.pagination.totalItems }
+    )
   }
 
   private loadVideoPlaylists (reset = false) {
     this.authService.userInformationLoaded
-        .pipe(mergeMap(() => {
-          const user = this.authService.getUser()
+      .pipe(mergeMap(() => {
+        const user = this.authService.getUser()
 
-          return this.videoPlaylistService.listAccountPlaylists(user.account, this.pagination, '-updatedAt', this.search)
-        })).subscribe(res => {
-          if (reset) this.videoPlaylists = []
+        return this.videoPlaylistService.listAccountPlaylists(user.account, this.pagination, '-updatedAt', this.search)
+      })).subscribe(res => {
+        if (reset) this.videoPlaylists = []
 
-          this.videoPlaylists = this.videoPlaylists.concat(res.data)
-          this.pagination.totalItems = res.total
+        this.videoPlaylists = this.videoPlaylists.concat(res.data)
+        this.pagination.totalItems = res.total
 
-          this.onDataSubject.next(res.data)
-        })
+        this.onDataSubject.next(res.data)
+      })
   }
 }

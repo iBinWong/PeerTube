@@ -74,7 +74,7 @@ describe('Test video playlists', function () {
   let commands: PlaylistsCommand[]
 
   before(async function () {
-    this.timeout(240000)
+    this.timeout(360000)
 
     servers = await createMultipleServers(3)
 
@@ -257,7 +257,7 @@ describe('Test video playlists', function () {
           expect(playlist.privacy.label).to.equal('Public')
           expect(playlist.type.id).to.equal(VideoPlaylistType.REGULAR)
           expect(playlist.type.label).to.equal('Regular')
-          expect(playlist.embedPath).to.equal('/video-playlists/embed/' + playlist.uuid)
+          expect(playlist.embedPath).to.equal('/video-playlists/embed/' + playlist.shortUUID)
 
           expect(playlist.videosLength).to.equal(0)
 
@@ -537,7 +537,7 @@ describe('Test video playlists', function () {
   describe('Element timestamps', function () {
 
     it('Should create a playlist containing different startTimestamp/endTimestamp videos', async function () {
-      this.timeout(30000)
+      this.timeout(120000)
 
       const addVideo = (attributes: any) => {
         return commands[0].addElement({ playlistId: playlistServer1Id, attributes })
@@ -652,7 +652,7 @@ describe('Test video playlists', function () {
     let video3: string
 
     before(async function () {
-      this.timeout(60000)
+      this.timeout(120000)
 
       groupUser1 = [ Object.assign({}, servers[0], { accessToken: userTokenServer1 }) ]
       groupWithoutToken1 = [ Object.assign({}, servers[0], { accessToken: undefined }) ]

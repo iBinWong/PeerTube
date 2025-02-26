@@ -1,22 +1,56 @@
-import { SortMeta } from 'primeng/api'
-import { switchMap } from 'rxjs/operators'
-import { environment } from 'src/environments/environment'
-import { Component, OnInit } from '@angular/core'
+import { NgClass, NgIf } from '@angular/common'
+import { Component, OnInit, inject } from '@angular/core'
 import { ActivatedRoute, Router } from '@angular/router'
 import { ConfirmService, MarkdownService, Notifier, RestPagination, RestTable, ServerService } from '@app/core'
-import { AdvancedInputFilter } from '@app/shared/shared-forms'
-import { DropdownAction, VideoService } from '@app/shared/shared-main'
-import { VideoBlockService } from '@app/shared/shared-moderation'
+import { PTDatePipe } from '@app/shared/shared-main/common/date.pipe'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
+import { VideoBlockService } from '@app/shared/shared-moderation/video-block.service'
+import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
 import { buildVideoEmbedLink, decorateVideoLink } from '@peertube/peertube-core-utils'
 import { VideoBlacklist, VideoBlacklistType, VideoBlacklistType_Type } from '@peertube/peertube-models'
 import { buildVideoOrPlaylistEmbed } from '@root-helpers/video'
+import { SharedModule, SortMeta } from 'primeng/api'
+import { TableModule } from 'primeng/table'
+import { switchMap } from 'rxjs/operators'
+import { environment } from 'src/environments/environment'
+import { AdvancedInputFilter, AdvancedInputFilterComponent } from '../../../shared/shared-forms/advanced-input-filter.component'
+import { GlobalIconComponent } from '../../../shared/shared-icons/global-icon.component'
+import { ActionDropdownComponent, DropdownAction } from '../../../shared/shared-main/buttons/action-dropdown.component'
+import { AutoColspanDirective } from '../../../shared/shared-main/common/auto-colspan.directive'
+import { EmbedComponent } from '../../../shared/shared-main/video/embed.component'
+import { TableExpanderIconComponent } from '../../../shared/shared-tables/table-expander-icon.component'
+import { VideoCellComponent } from '../../../shared/shared-tables/video-cell.component'
 
 @Component({
   selector: 'my-video-block-list',
   templateUrl: './video-block-list.component.html',
-  styleUrls: [ '../../../shared/shared-moderation/moderation.scss', './video-block-list.component.scss' ]
+  styleUrls: [ '../../../shared/shared-moderation/moderation.scss' ],
+  imports: [
+    GlobalIconComponent,
+    TableModule,
+    SharedModule,
+    AdvancedInputFilterComponent,
+    NgbTooltip,
+    NgIf,
+    TableExpanderIconComponent,
+    ActionDropdownComponent,
+    NgClass,
+    VideoCellComponent,
+    AutoColspanDirective,
+    EmbedComponent,
+    PTDatePipe
+  ]
 })
 export class VideoBlockListComponent extends RestTable implements OnInit {
+  protected route = inject(ActivatedRoute)
+  protected router = inject(Router)
+  private notifier = inject(Notifier)
+  private serverService = inject(ServerService)
+  private confirmService = inject(ConfirmService)
+  private videoBlocklistService = inject(VideoBlockService)
+  private markdownRenderer = inject(MarkdownService)
+  private videoService = inject(VideoService)
+
   blocklist: (VideoBlacklist & { reasonHtml?: string })[] = []
   totalRecords = 0
   sort: SortMeta = { field: 'createdAt', order: -1 }
@@ -41,16 +75,7 @@ export class VideoBlockListComponent extends RestTable implements OnInit {
     }
   ]
 
-  constructor (
-    protected route: ActivatedRoute,
-    protected router: Router,
-    private notifier: Notifier,
-    private serverService: ServerService,
-    private confirmService: ConfirmService,
-    private videoBlocklistService: VideoBlockService,
-    private markdownRenderer: MarkdownService,
-    private videoService: VideoService
-  ) {
+  constructor () {
     super()
 
     this.videoBlocklistActions = [
@@ -155,6 +180,7 @@ export class VideoBlockListComponent extends RestTable implements OnInit {
         title: false,
         warningTitle: false
       }),
+      aspectRatio: entry.video.aspectRatio,
       embedTitle: entry.video.name
     })
   }

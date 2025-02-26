@@ -1,15 +1,14 @@
-import { Hotkey, HotkeysService } from 'angular2-hotkeys'
-import { Observable, ReplaySubject, Subject, throwError as observableThrowError } from 'rxjs'
-import { catchError, map, mergeMap, share, tap } from 'rxjs/operators'
 import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams } from '@angular/common/http'
-import { Injectable } from '@angular/core'
+import { Injectable, inject } from '@angular/core'
 import { Router } from '@angular/router'
+import { Hotkey, HotkeysService } from '@app/core'
 import { Notifier } from '@app/core/notification/notifier.service'
+import { HttpStatusCode, OAuthClientLocal, User, UserLogin, UserRefreshToken, MyUser as UserServerModel } from '@peertube/peertube-models'
 import { logger, OAuthUserTokens, objectToUrlEncoded, peertubeLocalStorage } from '@root-helpers/index'
-import { HttpStatusCode, MyUser as UserServerModel, OAuthClientLocal, User, UserLogin, UserRefreshToken } from '@peertube/peertube-models'
+import { Observable, of, ReplaySubject, Subject, throwError } from 'rxjs'
+import { catchError, map, mergeMap, share, tap } from 'rxjs/operators'
 import { environment } from '../../../environments/environment'
 import { RestExtractor } from '../rest/rest-extractor.service'
-import { RedirectService } from '../routing'
 import { AuthStatus } from './auth-status.model'
 import { AuthUser } from './auth-user.model'
 
@@ -24,11 +23,17 @@ type UserLoginWithUserInformation = UserLoginWithUsername & User
 
 @Injectable()
 export class AuthService {
+  private http = inject(HttpClient)
+  private notifier = inject(Notifier)
+  private hotkeysService = inject(HotkeysService)
+  private restExtractor = inject(RestExtractor)
+  private router = inject(Router)
+
   private static BASE_CLIENT_URL = environment.apiUrl + '/api/v1/oauth-clients/local'
   private static BASE_TOKEN_URL = environment.apiUrl + '/api/v1/users/token'
   private static BASE_REVOKE_TOKEN_URL = environment.apiUrl + '/api/v1/users/revoke-token'
   private static BASE_USER_INFORMATION_URL = environment.apiUrl + '/api/v1/users/me'
-  private static LOCAL_STORAGE_OAUTH_CLIENT_KEYS = {
+  private static LS_OAUTH_CLIENT_KEYS = {
     CLIENT_ID: 'client_id',
     CLIENT_SECRET: 'client_secret'
   }
@@ -36,77 +41,72 @@ export class AuthService {
   loginChangedSource: Observable<AuthStatus>
   userInformationLoaded = new ReplaySubject<boolean>(1)
   tokensRefreshed = new ReplaySubject<void>(1)
-  hotkeys: Hotkey[]
+  loggedInHotkeys: Hotkey[]
 
-  private clientId: string = peertubeLocalStorage.getItem(AuthService.LOCAL_STORAGE_OAUTH_CLIENT_KEYS.CLIENT_ID)
-  private clientSecret: string = peertubeLocalStorage.getItem(AuthService.LOCAL_STORAGE_OAUTH_CLIENT_KEYS.CLIENT_SECRET)
+  private clientId: string = peertubeLocalStorage.getItem(AuthService.LS_OAUTH_CLIENT_KEYS.CLIENT_ID)
+  private clientSecret: string = peertubeLocalStorage.getItem(AuthService.LS_OAUTH_CLIENT_KEYS.CLIENT_SECRET)
   private loginChanged: Subject<AuthStatus>
   private user: AuthUser = null
-  private refreshingTokenObservable: Observable<any>
+  private refreshingTokenObservable: Observable<void>
 
-  constructor (
-    private redirectService: RedirectService,
-    private http: HttpClient,
-    private notifier: Notifier,
-    private hotkeysService: HotkeysService,
-    private restExtractor: RestExtractor,
-    private router: Router
-  ) {
+  constructor () {
     this.loginChanged = new Subject<AuthStatus>()
     this.loginChangedSource = this.loginChanged.asObservable()
 
     // Set HotKeys
-    this.hotkeys = [
-      new Hotkey('m s', (event: KeyboardEvent): boolean => {
+    this.loggedInHotkeys = [
+      new Hotkey('m s', e => {
         this.router.navigate([ '/videos/subscriptions' ])
         return false
-      }, undefined, $localize`Go to my subscriptions`),
-      new Hotkey('m v', (event: KeyboardEvent): boolean => {
+      }, $localize`Go to my subscriptions`),
+      new Hotkey('m v', e => {
         this.router.navigate([ '/my-library/videos' ])
         return false
-      }, undefined, $localize`Go to my videos`),
-      new Hotkey('m i', (event: KeyboardEvent): boolean => {
+      }, $localize`Go to my videos`),
+      new Hotkey('m i', e => {
         this.router.navigate([ '/my-library/video-imports' ])
         return false
-      }, undefined, $localize`Go to my imports`),
-      new Hotkey('m c', (event: KeyboardEvent): boolean => {
+      }, $localize`Go to my imports`),
+      new Hotkey('m c', e => {
         this.router.navigate([ '/my-library/video-channels' ])
         return false
-      }, undefined, $localize`Go to my channels`)
+      }, $localize`Go to my channels`)
     ]
   }
 
   buildAuthUser (userInfo: Partial<User>, tokens: OAuthUserTokens) {
     this.user = new AuthUser(userInfo, tokens)
+
+    this.hotkeysService.add(this.loggedInHotkeys)
   }
 
   loadClientCredentials () {
     // Fetch the client_id/client_secret
     this.http.get<OAuthClientLocal>(AuthService.BASE_CLIENT_URL)
-        .pipe(catchError(res => this.restExtractor.handleError(res)))
-        .subscribe({
-          next: res => {
-            this.clientId = res.client_id
-            this.clientSecret = res.client_secret
+      .pipe(catchError(res => this.restExtractor.handleError(res)))
+      .subscribe({
+        next: res => {
+          this.clientId = res.client_id
+          this.clientSecret = res.client_secret
 
-            peertubeLocalStorage.setItem(AuthService.LOCAL_STORAGE_OAUTH_CLIENT_KEYS.CLIENT_ID, this.clientId)
-            peertubeLocalStorage.setItem(AuthService.LOCAL_STORAGE_OAUTH_CLIENT_KEYS.CLIENT_SECRET, this.clientSecret)
+          peertubeLocalStorage.setItem(AuthService.LS_OAUTH_CLIENT_KEYS.CLIENT_ID, this.clientId)
+          peertubeLocalStorage.setItem(AuthService.LS_OAUTH_CLIENT_KEYS.CLIENT_SECRET, this.clientSecret)
 
-            logger.info('Client credentials loaded.')
-          },
+          logger.info('Client credentials loaded.')
+        },
 
-          error: err => {
-            let errorMessage = err.message
+        error: err => {
+          let errorMessage = err.message
 
-            if (err.status === HttpStatusCode.FORBIDDEN_403) {
-              errorMessage = $localize`Cannot retrieve OAuth Client credentials: ${err.message}.
+          if (err.status === HttpStatusCode.FORBIDDEN_403) {
+            errorMessage = $localize`Cannot retrieve OAuth Client credentials: ${err.message}.
 Ensure you have correctly configured PeerTube (config/ directory), in particular the "webserver" section.`
-            }
-
-            // We put a bigger timeout: this is an important message
-            this.notifier.error(errorMessage, $localize`Error`, 7000)
           }
-        })
+
+          // We put a bigger timeout: this is an important message
+          this.notifier.error(errorMessage, $localize`Error`, 7000)
+        }
+      })
   }
 
   getRefreshToken () {
@@ -158,7 +158,7 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
       response_type: 'code',
       grant_type: 'password',
       scope: 'upload',
-      username,
+      username: (username || '').trim(),
       password
     }
 
@@ -168,38 +168,39 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
     if (otpToken) headers = headers.set('x-peertube-otp', otpToken)
 
     return this.http.post<UserLogin>(AuthService.BASE_TOKEN_URL, objectToUrlEncoded(body), { headers })
-               .pipe(
-                 map(res => Object.assign(res, { username })),
-                 mergeMap(res => this.mergeUserInformation(res)),
-                 map(res => this.handleLogin(res)),
-                 catchError(res => this.restExtractor.handleError(res))
-               )
+      .pipe(
+        map(res => Object.assign(res, { username })),
+        mergeMap(res => this.mergeUserInformation(res)),
+        map(res => this.handleLogin(res)),
+        catchError(res => this.restExtractor.handleError(res))
+      )
   }
 
   logout () {
     const authHeaderValue = this.getRequestHeaderValue()
-    const headers = new HttpHeaders().set('Authorization', authHeaderValue)
 
-    this.http.post<{ redirectUrl?: string }>(AuthService.BASE_REVOKE_TOKEN_URL, {}, { headers })
-      .subscribe({
-        next: res => {
-          if (res.redirectUrl) {
-            window.location.href = res.redirectUrl
-          }
-        },
+    const obs: Observable<{ redirectUrl?: string }> = authHeaderValue
+      ? this.http.post(AuthService.BASE_REVOKE_TOKEN_URL, {}, { headers: new HttpHeaders().set('Authorization', authHeaderValue) })
+      : of({})
 
-        error: err => logger.error(err)
-      })
+    obs.subscribe({
+      next: res => {
+        if (res.redirectUrl) {
+          window.location.href = res.redirectUrl
+        }
+      },
+
+      error: err => logger.error(err)
+    })
 
     this.user = null
 
     this.setStatus(AuthStatus.LoggedOut)
-
-    this.hotkeysService.remove(this.hotkeys)
   }
 
   refreshAccessToken () {
     if (this.refreshingTokenObservable) return this.refreshingTokenObservable
+    if (!this.getAccessToken()) return throwError(() => new Error($localize`You need to reconnect`))
 
     logger.info('Refreshing token...')
 
@@ -207,10 +208,10 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
 
     // Form url encoded
     const body = new HttpParams().set('refresh_token', refreshToken)
-                                 .set('client_id', this.clientId)
-                                 .set('client_secret', this.clientSecret)
-                                 .set('response_type', 'code')
-                                 .set('grant_type', 'refresh_token')
+      .set('client_id', this.clientId)
+      .set('client_secret', this.clientSecret)
+      .set('response_type', 'code')
+      .set('grant_type', 'refresh_token')
 
     const headers = new HttpHeaders().set('Content-Type', 'application/x-www-form-urlencoded')
 
@@ -221,17 +222,13 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
           this.refreshingTokenObservable = null
         }),
         catchError(err => {
-          this.refreshingTokenObservable = null
-
-          logger.error(err)
-          logger.info('Cannot refresh token -> logout...')
+          logger.clientError(err)
           this.logout()
 
-          this.redirectService.redirectToLogin()
+          this.notifier.info($localize`Your authentication has expired, you need to reconnect.`, undefined, undefined, true)
+          this.refreshingTokenObservable = null
 
-          return observableThrowError(() => ({
-            error: $localize`You need to reconnect.`
-          }))
+          return throwError(() => new Error($localize`You need to reconnect`))
         }),
         share()
       )
@@ -248,13 +245,13 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
     }
 
     this.mergeUserInformation(obj)
-        .subscribe({
-          next: res => {
-            this.user.patch(res)
+      .subscribe({
+        next: res => {
+          this.user.patch(res)
 
-            this.userInformationLoaded.next(true)
-          }
-        })
+          this.userInformationLoaded.next(true)
+        }
+      })
   }
 
   isOTPMissingError (err: HttpErrorResponse) {
@@ -270,7 +267,7 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
     const headers = new HttpHeaders().set('Authorization', `${obj.token_type} ${obj.access_token}`)
 
     return this.http.get<UserServerModel>(AuthService.BASE_USER_INFORMATION_URL, { headers })
-               .pipe(map(res => Object.assign(obj, res)))
+      .pipe(map(res => Object.assign(obj, res)))
   }
 
   private handleLogin (obj: UserLoginWithUserInformation) {
@@ -284,8 +281,6 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
 
     this.setStatus(AuthStatus.LoggedIn)
     this.userInformationLoaded.next(true)
-
-    this.hotkeysService.add(this.hotkeys)
   }
 
   private handleRefreshToken (obj: UserRefreshToken) {
@@ -295,5 +290,11 @@ Ensure you have correctly configured PeerTube (config/ directory), in particular
 
   private setStatus (status: AuthStatus) {
     this.loginChanged.next(status)
+
+    if (status === AuthStatus.LoggedIn) {
+      this.hotkeysService.add(this.loggedInHotkeys)
+    } else {
+      this.hotkeysService.remove(this.loggedInHotkeys)
+    }
   }
 }

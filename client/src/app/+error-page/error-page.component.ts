@@ -1,21 +1,23 @@
-import { Component, OnInit } from '@angular/core'
+import { Component, OnInit, inject } from '@angular/core'
 import { Title } from '@angular/platform-browser'
 import { Router } from '@angular/router'
+import { LoginLinkComponent } from '@app/shared/shared-main/users/login-link.component'
 import { HttpStatusCode, HttpStatusCodeType } from '@peertube/peertube-models'
 
 @Component({
   selector: 'my-error-page',
   templateUrl: './error-page.component.html',
-  styleUrls: [ './error-page.component.scss' ]
+  styleUrls: [ './error-page.component.scss' ],
+  imports: [ LoginLinkComponent ]
 })
 export class ErrorPageComponent implements OnInit {
+  private titleService = inject(Title)
+  private router = inject(Router)
+
   status: HttpStatusCodeType = HttpStatusCode.NOT_FOUND_404
   type: 'video' | 'other' = 'other'
 
-  public constructor (
-    private titleService: Title,
-    private router: Router
-  ) {
+  public constructor () {
     const state = this.router.getCurrentNavigation()?.extras.state
     this.type = state?.type || this.type
     this.status = state?.obj.status || this.status

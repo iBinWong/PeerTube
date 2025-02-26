@@ -1,31 +1,46 @@
-
 import { SelectOptionsItem } from 'src/types/select-options-item.model'
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core'
-import { FormGroup } from '@angular/forms'
+import { Component, OnChanges, OnInit, SimpleChanges, inject, input } from '@angular/core'
+import { FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { HTMLServerConfig } from '@peertube/peertube-models'
 import { ConfigService } from '../shared/config.service'
 import { EditConfigurationService, ResolutionOption } from './edit-configuration.service'
+import { SelectCustomValueComponent } from '../../../shared/shared-forms/select/select-custom-value.component'
+import { RouterLink } from '@angular/router'
+import { SelectOptionsComponent } from '../../../shared/shared-forms/select/select-options.component'
+import { NgClass, NgIf, NgFor } from '@angular/common'
+import { PeerTubeTemplateDirective } from '../../../shared/shared-main/common/peertube-template.directive'
+import { PeertubeCheckboxComponent } from '../../../shared/shared-forms/peertube-checkbox.component'
 
 @Component({
   selector: 'my-edit-live-configuration',
   templateUrl: './edit-live-configuration.component.html',
-  styleUrls: [ './edit-custom-config.component.scss' ]
+  styleUrls: [ './edit-custom-config.component.scss' ],
+  imports: [
+    FormsModule,
+    ReactiveFormsModule,
+    PeertubeCheckboxComponent,
+    PeerTubeTemplateDirective,
+    NgClass,
+    NgIf,
+    SelectOptionsComponent,
+    NgFor,
+    RouterLink,
+    SelectCustomValueComponent
+  ]
 })
 export class EditLiveConfigurationComponent implements OnInit, OnChanges {
-  @Input() form: FormGroup
-  @Input() formErrors: any
-  @Input() serverConfig: HTMLServerConfig
+  private configService = inject(ConfigService)
+  private editConfigurationService = inject(EditConfigurationService)
+
+  readonly form = input<FormGroup>(undefined)
+  readonly formErrors = input<any>(undefined)
+  readonly serverConfig = input<HTMLServerConfig>(undefined)
 
   transcodingThreadOptions: SelectOptionsItem[] = []
   transcodingProfiles: SelectOptionsItem[] = []
 
   liveMaxDurationOptions: SelectOptionsItem[] = []
   liveResolutions: ResolutionOption[] = []
-
-  constructor (
-    private configService: ConfigService,
-    private editConfigurationService: EditConfigurationService
-  ) { }
 
   ngOnInit () {
     this.transcodingThreadOptions = this.configService.transcodingThreadOptions
@@ -38,7 +53,7 @@ export class EditLiveConfigurationComponent implements OnInit, OnChanges {
       { id: 1000 * 3600 * 10, label: $localize`10 hours` }
     ]
 
-    this.liveResolutions = this.editConfigurationService.getLiveResolutions()
+    this.liveResolutions = this.editConfigurationService.getTranscodingResolutions()
   }
 
   ngOnChanges (changes: SimpleChanges) {
@@ -48,7 +63,7 @@ export class EditLiveConfigurationComponent implements OnInit, OnChanges {
   }
 
   buildAvailableTranscodingProfile () {
-    const profiles = this.serverConfig.live.transcoding.availableProfiles
+    const profiles = this.serverConfig().live.transcoding.availableProfiles
 
     return profiles.map(p => {
       if (p === 'default') {
@@ -64,15 +79,15 @@ export class EditLiveConfigurationComponent implements OnInit, OnChanges {
   }
 
   getLiveRTMPPort () {
-    return this.serverConfig.live.rtmp.port
+    return this.serverConfig().live.rtmp.port
   }
 
   isLiveEnabled () {
-    return this.editConfigurationService.isLiveEnabled(this.form)
+    return this.editConfigurationService.isLiveEnabled(this.form())
   }
 
   isRemoteRunnerLiveEnabled () {
-    return this.editConfigurationService.isRemoteRunnerLiveEnabled(this.form)
+    return this.editConfigurationService.isRemoteRunnerLiveEnabled(this.form())
   }
 
   getDisabledLiveClass () {
@@ -88,10 +103,10 @@ export class EditLiveConfigurationComponent implements OnInit, OnChanges {
   }
 
   isLiveTranscodingEnabled () {
-    return this.editConfigurationService.isLiveTranscodingEnabled(this.form)
+    return this.editConfigurationService.isLiveTranscodingEnabled(this.form())
   }
 
   getTotalTranscodingThreads () {
-    return this.editConfigurationService.getTotalTranscodingThreads(this.form)
+    return this.editConfigurationService.getTotalTranscodingThreads(this.form())
   }
 }

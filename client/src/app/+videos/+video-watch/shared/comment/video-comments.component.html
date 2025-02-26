@@ -1,15 +1,16 @@
 <div>
   <div class="title-block">
-    <h2 class="title-page">
+    <h2>
       {totalNotDeletedComments, plural, =0 {Comments} =1 {1 Comment} other {{{totalNotDeletedComments}} Comments}}
     </h2>
 
     <my-feed [syndicationItems]="syndicationItems"></my-feed>
 
-    <div ngbDropdown class="d-inline-block ms-4 dropdown-root">
-      <button class="btn btn-sm btn-outline-secondary" id="dropdown-sort-comments" ngbDropdownToggle i18n>
+    <div ngbDropdown class="d-inline-block ms-auto dropdown-root">
+      <button class="peertube-button tertiary-button" id="dropdown-sort-comments" ngbDropdownToggle i18n>
         SORT BY
       </button>
+
       <div ngbDropdownMenu aria-labelledby="dropdown-sort-comments">
         <button (click)="handleSortChange('-createdAt')" ngbDropdownItem i18n>Most recent first (default)</button>
         <button (click)="handleSortChange('-totalReplies')" ngbDropdownItem i18n>Most replies first</button>
@@ -17,11 +18,11 @@
     </div>
   </div>
 
-  <ng-template [ngIf]="video.commentsEnabled === true">
+  @if (commentsEnabled) {
     <my-video-comment-add
-      [video]="video"
-      [videoPassword]="videoPassword"
-      [user]="user"
+      [video]="video()"
+      [videoPassword]="videoPassword()"
+      [user]="user()"
       (commentCreated)="onCommentThreadCreated($event)"
       [textValue]="commentThreadRedraftValue"
     ></my-video-comment-add>
@@ -34,8 +35,8 @@
         <my-video-comment
           *ngIf="highlightedThread"
           [comment]="highlightedThread"
-          [video]="video"
-          [videoPassword]="videoPassword"
+          [video]="video()"
+          [videoPassword]="videoPassword()"
           [inReplyToCommentId]="inReplyToCommentId"
           [commentTree]="threadComments[highlightedThread.id]"
           [highlightedComment]="true"
@@ -43,6 +44,7 @@
           (wantedToReply)="onWantedToReply($event)"
           (wantedToDelete)="onWantedToDelete($event)"
           (wantedToRedraft)="onWantedToRedraft($event)"
+          (wantedToApprove)="onWantToApprove($event)"
           (threadCreated)="onThreadCreated($event)"
           (resetReply)="onResetReply()"
           (timestampClicked)="handleTimestampClicked($event)"
@@ -54,14 +56,15 @@
         <my-video-comment
           *ngIf="!highlightedThread || comment.id !== highlightedThread.id"
           [comment]="comment"
-          [video]="video"
-          [videoPassword]="videoPassword"
+          [video]="video()"
+          [videoPassword]="videoPassword()"
           [inReplyToCommentId]="inReplyToCommentId"
           [commentTree]="threadComments[comment.id]"
           [firstInThread]="i + 1 !== comments.length"
           (wantedToReply)="onWantedToReply($event)"
           (wantedToDelete)="onWantedToDelete($event)"
           (wantedToRedraft)="onWantedToRedraft($event)"
+          (wantedToApprove)="onWantToApprove($event)"
           (threadCreated)="onThreadCreated($event)"
           (resetReply)="onResetReply()"
           (timestampClicked)="handleTimestampClicked($event)"
@@ -74,10 +77,10 @@
 
             <ng-template #hasAuthorComments>
               <ng-container *ngIf="comment.totalReplies !== comment.totalRepliesFromVideoAuthor; else onlyAuthorComments" i18n>
-                View {comment.totalReplies, plural, =1 {1 reply} other {{{ comment.totalReplies }} replies}} from {{ video?.account?.displayName || 'the author' }} and others
+                View {comment.totalReplies, plural, =1 {1 reply} other {{{ comment.totalReplies }} replies}} from {{ video()?.account?.displayName || 'the author' }} and others
               </ng-container>
               <ng-template i18n #onlyAuthorComments>
-                View {comment.totalReplies, plural, =1 {1 reply} other {{{ comment.totalReplies }} replies}} from {{ video?.account?.displayName || 'the author' }}
+                View {comment.totalReplies, plural, =1 {1 reply} other {{{ comment.totalReplies }} replies}} from {{ video()?.account?.displayName || 'the author' }}
               </ng-template>
             </ng-template>
 
@@ -89,9 +92,7 @@
 
       </div>
     </div>
-  </ng-template>
-
-  <div *ngIf="video.commentsEnabled === false" i18n>
-    Comments are disabled.
-  </div>
+  } @else {
+    <div i18n>Comments are disabled.</div>
+  }
 </div>

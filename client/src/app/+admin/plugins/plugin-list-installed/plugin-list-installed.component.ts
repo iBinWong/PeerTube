@@ -1,18 +1,38 @@
-import { Subject } from 'rxjs'
-import { Component, OnInit } from '@angular/core'
+import { NgFor, NgIf } from '@angular/common'
+import { Component, OnInit, inject } from '@angular/core'
 import { ActivatedRoute, Router } from '@angular/router'
 import { PluginApiService } from '@app/+admin/plugins/shared/plugin-api.service'
-import { ComponentPagination, ConfirmService, hasMoreItems, Notifier } from '@app/core'
+import { ComponentPagination, ConfirmService, hasMoreItems, Notifier, resetCurrentPage, updatePaginationOnDelete } from '@app/core'
 import { PluginService } from '@app/core/plugins/plugin.service'
 import { compareSemVer } from '@peertube/peertube-core-utils'
 import { PeerTubePlugin, PluginType, PluginType_Type } from '@peertube/peertube-models'
+import { Subject } from 'rxjs'
+import { ButtonComponent } from '../../../shared/shared-main/buttons/button.component'
+import { DeleteButtonComponent } from '../../../shared/shared-main/buttons/delete-button.component'
+import { InfiniteScrollerDirective } from '../../../shared/shared-main/common/infinite-scroller.directive'
+import { PluginCardComponent } from '../shared/plugin-card.component'
 
 @Component({
   selector: 'my-plugin-list-installed',
   templateUrl: './plugin-list-installed.component.html',
-  styleUrls: [ './plugin-list-installed.component.scss' ]
+  styleUrls: [ './plugin-list-installed.component.scss' ],
+  imports: [
+    NgIf,
+    InfiniteScrollerDirective,
+    NgFor,
+    PluginCardComponent,
+    ButtonComponent,
+    DeleteButtonComponent
+  ]
 })
 export class PluginListInstalledComponent implements OnInit {
+  private pluginService = inject(PluginService)
+  private pluginApiService = inject(PluginApiService)
+  private notifier = inject(Notifier)
+  private confirmService = inject(ConfirmService)
+  private router = inject(Router)
+  private route = inject(ActivatedRoute)
+
   pluginType: PluginType_Type
 
   pagination: ComponentPagination = {
@@ -27,16 +47,6 @@ export class PluginListInstalledComponent implements OnInit {
   uninstalling: { [name: string]: boolean } = {}
 
   onDataSubject = new Subject<any[]>()
-
-  constructor (
-    private pluginService: PluginService,
-    private pluginApiService: PluginApiService,
-    private notifier: Notifier,
-    private confirmService: ConfirmService,
-    private router: Router,
-    private route: ActivatedRoute
-  ) {
-  }
 
   ngOnInit () {
     if (!this.route.snapshot.queryParams['pluginType']) {
@@ -55,24 +65,24 @@ export class PluginListInstalledComponent implements OnInit {
   }
 
   reloadPlugins () {
-    this.pagination.currentPage = 1
     this.plugins = []
+    resetCurrentPage(this.pagination)
 
     this.loadMorePlugins()
   }
 
   loadMorePlugins () {
     this.pluginApiService.getPlugins(this.pluginType, this.pagination, this.sort)
-        .subscribe({
-          next: res => {
-            this.plugins = this.plugins.concat(res.data)
-            this.pagination.totalItems = res.total
+      .subscribe({
+        next: res => {
+          this.plugins = this.plugins.concat(res.data)
+          this.pagination.totalItems = res.total
 
-            this.onDataSubject.next(res.data)
-          },
+          this.onDataSubject.next(res.data)
+        },
 
-          error: err => this.notifier.error(err.message)
-        })
+        error: err => this.notifier.error(err.message)
+      })
   }
 
   onNearOfBottom () {
@@ -129,7 +139,7 @@ export class PluginListInstalledComponent implements OnInit {
           this.notifier.success($localize`${plugin.name} uninstalled.`)
 
           this.plugins = this.plugins.filter(p => p.name !== plugin.name)
-          this.pagination.totalItems--
+          updatePaginationOnDelete(this.pagination)
 
           this.uninstalling[pluginKey] = false
         },
@@ -158,25 +168,25 @@ export class PluginListInstalledComponent implements OnInit {
     this.updating[pluginKey] = true
 
     this.pluginApiService.update(plugin.name, plugin.type)
-        .pipe()
-        .subscribe({
-          next: res => {
-            this.updating[pluginKey] = false
+      .pipe()
+      .subscribe({
+        next: res => {
+          this.updating[pluginKey] = false
 
-            this.notifier.success($localize`${plugin.name} updated.`)
+          this.notifier.success($localize`${plugin.name} updated.`)
 
-            Object.assign(plugin, res)
-          },
+          Object.assign(plugin, res)
+        },
 
-          error: err => {
-            this.notifier.error(err.message)
-            this.updating[pluginKey] = false
-          }
-        })
+        error: err => {
+          this.notifier.error(err.message)
+          this.updating[pluginKey] = false
+        }
+      })
   }
 
   getShowRouterLink (plugin: PeerTubePlugin) {
-    return [ '/admin', 'plugins', 'show', this.pluginService.nameToNpmName(plugin.name, plugin.type) ]
+    return [ '/admin', 'settings', 'plugins', 'show', this.pluginService.nameToNpmName(plugin.name, plugin.type) ]
   }
 
   getPluginOrThemeHref (name: string) {
@@ -190,8 +200,8 @@ export class PluginListInstalledComponent implements OnInit {
   private isMajorUpgrade (plugin: PeerTubePlugin) {
     if (!plugin.latestVersion) return false
 
-    const latestMajor = plugin.latestVersion.split('.')[0]
-    const currentMajor = plugin.version.split('.')[0]
+    const latestMajor = parseInt(plugin.latestVersion.split('.')[0])
+    const currentMajor = parseInt(plugin.version.split('.')[0])
 
     return latestMajor > currentMajor
   }

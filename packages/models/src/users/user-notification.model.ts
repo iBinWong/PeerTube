@@ -1,6 +1,8 @@
 import { FollowState } from '../actors/index.js'
 import { AbuseStateType } from '../moderation/index.js'
 import { PluginType_Type } from '../plugins/index.js'
+import { VideoConstant } from '../videos/video-constant.model.js'
+import { VideoStateType } from '../videos/video-state.enum.js'
 
 export const UserNotificationType = {
   NEW_VIDEO_FROM_SUBSCRIPTION: 1,
@@ -34,7 +36,11 @@ export const UserNotificationType = {
 
   MY_VIDEO_STUDIO_EDITION_FINISHED: 19,
 
-  NEW_USER_REGISTRATION_REQUEST: 20
+  NEW_USER_REGISTRATION_REQUEST: 20,
+
+  NEW_LIVE_FROM_SUBSCRIPTION: 21,
+
+  MY_VIDEO_TRANSCRIPTION_GENERATED: 22
 } as const
 
 export type UserNotificationType_Type = typeof UserNotificationType[keyof typeof UserNotificationType]
@@ -44,11 +50,19 @@ export interface VideoInfo {
   uuid: string
   shortUUID: string
   name: string
+  state: {
+    id: VideoStateType
+    label: string
+  }
 }
 
 export interface AvatarInfo {
   width: number
+
+  // TODO: remove, deprecated in 7.1
   path: string
+
+  fileUrl: string
 }
 
 export interface ActorInfo {
@@ -83,6 +97,7 @@ export interface UserNotification {
     threadId: number
     account: ActorInfo
     video: VideoInfo
+    heldForReview: boolean
   }
 
   abuse?: {
@@ -133,6 +148,12 @@ export interface UserNotification {
   registration?: {
     id: number
     username: string
+  }
+
+  videoCaption?: {
+    id: number
+    language: VideoConstant<string>
+    video: VideoInfo
   }
 
   createdAt: string

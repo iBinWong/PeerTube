@@ -1,15 +1,26 @@
+import { NgFor, NgIf } from '@angular/common'
+import { AfterViewInit, Component, OnDestroy, OnInit, inject } from '@angular/core'
+import { ComponentPagination, hasMoreItems, HooksService, resetCurrentPage, ScreenService } from '@app/core'
+import { VideoChannel } from '@app/shared/shared-main/channel/video-channel.model'
+import { VideoChannelService } from '@app/shared/shared-main/channel/video-channel.service'
+import { VideoPlaylist } from '@app/shared/shared-video-playlist/video-playlist.model'
+import { VideoPlaylistService } from '@app/shared/shared-video-playlist/video-playlist.service'
 import { Subject, Subscription } from 'rxjs'
-import { AfterViewInit, Component, OnDestroy, OnInit } from '@angular/core'
-import { ComponentPagination, hasMoreItems, HooksService, ScreenService } from '@app/core'
-import { VideoChannel, VideoChannelService } from '@app/shared/shared-main'
-import { VideoPlaylist, VideoPlaylistService } from '@app/shared/shared-video-playlist'
+import { InfiniteScrollerDirective } from '../../shared/shared-main/common/infinite-scroller.directive'
+import { VideoPlaylistMiniatureComponent } from '../../shared/shared-video-playlist/video-playlist-miniature.component'
 
 @Component({
   selector: 'my-video-channel-playlists',
   templateUrl: './video-channel-playlists.component.html',
-  styleUrls: [ './video-channel-playlists.component.scss' ]
+  styleUrls: [ './video-channel-playlists.component.scss' ],
+  imports: [ NgIf, InfiniteScrollerDirective, NgFor, VideoPlaylistMiniatureComponent ]
 })
 export class VideoChannelPlaylistsComponent implements OnInit, AfterViewInit, OnDestroy {
+  private videoPlaylistService = inject(VideoPlaylistService)
+  private videoChannelService = inject(VideoChannelService)
+  private screenService = inject(ScreenService)
+  private hooks = inject(HooksService)
+
   videoPlaylists: VideoPlaylist[] = []
 
   pagination: ComponentPagination = {
@@ -23,13 +34,6 @@ export class VideoChannelPlaylistsComponent implements OnInit, AfterViewInit, On
   private videoChannelSub: Subscription
   private videoChannel: VideoChannel
 
-  constructor (
-    private videoPlaylistService: VideoPlaylistService,
-    private videoChannelService: VideoChannelService,
-    private screenService: ScreenService,
-    private hooks: HooksService
-  ) {}
-
   ngOnInit () {
     // Parent get the video channel for us
     this.videoChannelSub = this.videoChannelService.videoChannelLoaded
@@ -38,6 +42,8 @@ export class VideoChannelPlaylistsComponent implements OnInit, AfterViewInit, On
 
         this.hooks.runAction('action:video-channel-playlists.video-channel.loaded', 'video-channel', { videoChannel })
 
+        this.videoPlaylists = []
+        resetCurrentPage(this.pagination)
         this.loadVideoPlaylists()
       })
   }

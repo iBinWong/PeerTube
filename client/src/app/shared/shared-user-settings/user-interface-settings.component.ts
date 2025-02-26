@@ -1,36 +1,37 @@
 import { Subject, Subscription } from 'rxjs'
-import { Component, Input, OnDestroy, OnInit } from '@angular/core'
+import { Component, OnDestroy, OnInit, inject, input } from '@angular/core'
 import { AuthService, Notifier, ServerService, ThemeService, UserService } from '@app/core'
-import { FormReactive, FormReactiveService } from '@app/shared/shared-forms'
+import { FormReactive } from '@app/shared/shared-forms/form-reactive'
+import { FormReactiveService } from '@app/shared/shared-forms/form-reactive.service'
 import { HTMLServerConfig, User, UserUpdateMe } from '@peertube/peertube-models'
 import { SelectOptionsItem } from 'src/types'
+import { NgIf } from '@angular/common'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { SelectOptionsComponent } from '../shared-forms/select/select-options.component'
 
 @Component({
   selector: 'my-user-interface-settings',
   templateUrl: './user-interface-settings.component.html',
-  styleUrls: [ './user-interface-settings.component.scss' ]
+  styleUrls: [ './user-interface-settings.component.scss' ],
+  imports: [ FormsModule, ReactiveFormsModule, NgIf, SelectOptionsComponent ]
 })
 export class UserInterfaceSettingsComponent extends FormReactive implements OnInit, OnDestroy {
-  @Input() user: User = null
-  @Input() reactiveUpdate = false
-  @Input() notifyOnUpdate = true
-  @Input() userInformationLoaded: Subject<any>
+  protected formReactiveService = inject(FormReactiveService)
+  private authService = inject(AuthService)
+  private notifier = inject(Notifier)
+  private userService = inject(UserService)
+  private themeService = inject(ThemeService)
+  private serverService = inject(ServerService)
+
+  readonly user = input<User>(undefined)
+  readonly reactiveUpdate = input(false)
+  readonly notifyOnUpdate = input(true)
+  readonly userInformationLoaded = input<Subject<any>>(undefined)
 
   availableThemes: SelectOptionsItem[]
   formValuesWatcher: Subscription
 
   private serverConfig: HTMLServerConfig
-
-  constructor (
-    protected formReactiveService: FormReactiveService,
-    private authService: AuthService,
-    private notifier: Notifier,
-    private userService: UserService,
-    private themeService: ThemeService,
-    private serverService: ServerService
-  ) {
-    super()
-  }
 
   get instanceName () {
     return this.serverConfig.instance.name
@@ -39,19 +40,25 @@ export class UserInterfaceSettingsComponent extends FormReactive implements OnIn
   ngOnInit () {
     this.serverConfig = this.serverService.getHTMLConfig()
 
-    this.availableThemes = this.themeService.buildAvailableThemes()
+    this.availableThemes = [
+      { id: 'instance-default', label: $localize`${this.instanceName} theme`, description: this.getDefaultInstanceThemeLabel() },
+
+      this.themeService.getDefaultThemeItem(),
+
+      ...this.themeService.buildAvailableThemes()
+    ]
 
     this.buildForm({
       theme: null
     })
 
-    this.userInformationLoaded
+    this.userInformationLoaded()
       .subscribe(() => {
         this.form.patchValue({
-          theme: this.user.theme
+          theme: this.user().theme
         })
 
-        if (this.reactiveUpdate) {
+        if (this.reactiveUpdate()) {
           this.formValuesWatcher = this.form.valueChanges.subscribe(() => this.updateInterfaceSettings())
         }
       })
@@ -59,20 +66,6 @@ export class UserInterfaceSettingsComponent extends FormReactive implements OnIn
 
   ngOnDestroy () {
     this.formValuesWatcher?.unsubscribe()
-  }
-
-  getDefaultThemeLabel () {
-    return this.themeService.getDefaultThemeLabel()
-  }
-
-  getDefaultInstanceThemeLabel () {
-    const theme = this.serverConfig.theme.default
-
-    if (theme === 'default') {
-      return this.getDefaultThemeLabel()
-    }
-
-    return theme
   }
 
   updateInterfaceSettings () {
@@ -88,7 +81,7 @@ export class UserInterfaceSettingsComponent extends FormReactive implements OnIn
           next: () => {
             this.authService.refreshUserInformation()
 
-            if (this.notifyOnUpdate) this.notifier.success($localize`Interface settings updated.`)
+            if (this.notifyOnUpdate()) this.notifier.success($localize`Interface settings updated.`)
           },
 
           error: err => this.notifier.error(err.message)
@@ -98,6 +91,16 @@ export class UserInterfaceSettingsComponent extends FormReactive implements OnIn
     }
 
     this.userService.updateMyAnonymousProfile(details)
-    if (this.notifyOnUpdate) this.notifier.success($localize`Interface settings updated.`)
+    if (this.notifyOnUpdate()) this.notifier.success($localize`Interface settings updated.`)
+  }
+
+  private getDefaultInstanceThemeLabel () {
+    const theme = this.serverConfig.theme.default
+
+    if (theme === 'default') {
+      return this.themeService.getDefaultThemeItem().label
+    }
+
+    return theme
   }
 }

@@ -1,33 +1,72 @@
+import { NgClass, NgIf } from '@angular/common'
+import { Component, OnDestroy, OnInit, inject, viewChild } from '@angular/core'
+import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router'
+import { AuthService, MarkdownService, MetaService, Notifier, RedirectService, RestExtractor, ScreenService, UserService } from '@app/core'
+import { Account } from '@app/shared/shared-main/account/account.model'
+import { AccountService } from '@app/shared/shared-main/account/account.service'
+import { DropdownAction } from '@app/shared/shared-main/buttons/action-dropdown.component'
+import { VideoChannel } from '@app/shared/shared-main/channel/video-channel.model'
+import { VideoChannelService } from '@app/shared/shared-main/channel/video-channel.service'
+import { HorizontalMenuComponent, HorizontalMenuEntry } from '@app/shared/shared-main/menu/horizontal-menu.component'
+import { VideoService } from '@app/shared/shared-main/video/video.service'
+import { BlocklistService } from '@app/shared/shared-moderation/blocklist.service'
+import { AccountReportComponent } from '@app/shared/shared-moderation/report-modals'
+import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
+import { HttpStatusCode, User, UserRight } from '@peertube/peertube-models'
 import { Subscription } from 'rxjs'
 import { catchError, distinctUntilChanged, map, switchMap, tap } from 'rxjs/operators'
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core'
-import { ActivatedRoute, Router } from '@angular/router'
-import { AuthService, MarkdownService, Notifier, RedirectService, RestExtractor, ScreenService, UserService } from '@app/core'
-import {
-  Account,
-  AccountService,
-  DropdownAction,
-  ListOverflowItem,
-  VideoChannel,
-  VideoChannelService,
-  VideoService
-} from '@app/shared/shared-main'
-import { AccountReportComponent, BlocklistService } from '@app/shared/shared-moderation'
-import { HttpStatusCode, User, UserRight } from '@peertube/peertube-models'
+import { ActorAvatarComponent } from '../shared/shared-actor-image/actor-avatar.component'
+import { CopyButtonComponent } from '../shared/shared-main/buttons/copy-button.component'
+import { SimpleSearchInputComponent } from '../shared/shared-main/search/simple-search-input.component'
+import { AccountBlockBadgesComponent } from '../shared/shared-moderation/account-block-badges.component'
+import { UserModerationDropdownComponent } from '../shared/shared-moderation/user-moderation-dropdown.component'
+import { SubscribeButtonComponent } from '../shared/shared-user-subscription/subscribe-button.component'
 
 @Component({
   templateUrl: './accounts.component.html',
-  styleUrls: [ './accounts.component.scss' ]
+  styleUrls: [ './accounts.component.scss' ],
+  imports: [
+    NgIf,
+    ActorAvatarComponent,
+    UserModerationDropdownComponent,
+    NgbTooltip,
+    AccountBlockBadgesComponent,
+    CopyButtonComponent,
+    NgClass,
+    RouterLink,
+    SubscribeButtonComponent,
+    RouterLinkActive,
+    HorizontalMenuComponent,
+    SimpleSearchInputComponent,
+    RouterOutlet,
+    AccountReportComponent,
+    HorizontalMenuComponent
+  ]
 })
 export class AccountsComponent implements OnInit, OnDestroy {
-  @ViewChild('accountReportModal') accountReportModal: AccountReportComponent
+  private route = inject(ActivatedRoute)
+  private router = inject(Router)
+  private userService = inject(UserService)
+  private accountService = inject(AccountService)
+  private videoChannelService = inject(VideoChannelService)
+  private notifier = inject(Notifier)
+  private restExtractor = inject(RestExtractor)
+  private redirectService = inject(RedirectService)
+  private authService = inject(AuthService)
+  private videoService = inject(VideoService)
+  private markdown = inject(MarkdownService)
+  private blocklist = inject(BlocklistService)
+  private screenService = inject(ScreenService)
+  private metaService = inject(MetaService)
+
+  readonly accountReportModal = viewChild<AccountReportComponent>('accountReportModal')
 
   account: Account
   accountUser: User
 
   videoChannels: VideoChannel[] = []
 
-  links: ListOverflowItem[] = []
+  links: HorizontalMenuEntry[] = []
   hideMenu = false
 
   accountVideosCount: number
@@ -38,47 +77,32 @@ export class AccountsComponent implements OnInit, OnDestroy {
 
   private routeSub: Subscription
 
-  constructor (
-    private route: ActivatedRoute,
-    private router: Router,
-    private userService: UserService,
-    private accountService: AccountService,
-    private videoChannelService: VideoChannelService,
-    private notifier: Notifier,
-    private restExtractor: RestExtractor,
-    private redirectService: RedirectService,
-    private authService: AuthService,
-    private videoService: VideoService,
-    private markdown: MarkdownService,
-    private blocklist: BlocklistService,
-    private screenService: ScreenService
-  ) {
-  }
-
   ngOnInit () {
     this.routeSub = this.route.params
-                        .pipe(
-                          map(params => params['accountId']),
-                          distinctUntilChanged(),
-                          switchMap(accountId => this.accountService.getAccount(accountId)),
-                          tap(account => this.onAccount(account)),
-                          switchMap(account => this.videoChannelService.listAccountVideoChannels({ account })),
-                          catchError(err => this.restExtractor.redirectTo404IfNotFound(err, 'other', [
-                            HttpStatusCode.BAD_REQUEST_400,
-                            HttpStatusCode.NOT_FOUND_404
-                          ]))
-                        )
-                        .subscribe({
-                          next: videoChannels => {
-                            this.videoChannels = videoChannels.data
-                          },
+      .pipe(
+        map(params => params['accountId']),
+        distinctUntilChanged(),
+        switchMap(accountId => this.accountService.getAccount(accountId)),
+        tap(account => this.onAccount(account)),
+        switchMap(account => this.videoChannelService.listAccountVideoChannels({ account })),
+        catchError(err =>
+          this.restExtractor.redirectTo404IfNotFound(err, 'other', [
+            HttpStatusCode.BAD_REQUEST_400,
+            HttpStatusCode.NOT_FOUND_404
+          ])
+        )
+      )
+      .subscribe({
+        next: videoChannels => {
+          this.videoChannels = videoChannels.data
+        },
 
-                          error: err => this.notifier.error(err.message)
-                        })
+        error: err => this.notifier.error(err.message)
+      })
 
     this.links = [
-      { label: $localize`CHANNELS`, routerLink: 'video-channels' },
-      { label: $localize`VIDEOS`, routerLink: 'videos' }
+      { label: $localize`Channels`, routerLink: 'video-channels' },
+      { label: $localize`Videos`, routerLink: 'videos' }
     ]
   }
 
@@ -99,6 +123,12 @@ export class AccountsComponent implements OnInit, OnDestroy {
 
   isInSmallView () {
     return this.screenService.isInSmallView()
+  }
+
+  getAccountAvatarSize () {
+    if (this.isInSmallView()) return 80
+
+    return 120
   }
 
   isManageable () {
@@ -138,6 +168,8 @@ export class AccountsComponent implements OnInit, OnDestroy {
   }
 
   private async onAccount (account: Account) {
+    this.metaService.setTitle(account.displayName)
+
     this.accountDescriptionHTML = await this.markdown.textMarkdownToHTML({
       markdown: account.description,
       withEmoji: true,
@@ -154,7 +186,7 @@ export class AccountsComponent implements OnInit, OnDestroy {
   }
 
   private showReportModal () {
-    this.accountReportModal.show(this.account)
+    this.accountReportModal().show(this.account)
   }
 
   private loadUserIfNeeded (account: Account) {
@@ -177,24 +209,19 @@ export class AccountsComponent implements OnInit, OnDestroy {
     this.prependModerationActions = []
 
     if (!this.authService.isLoggedIn()) return
+    if (this.isManageable()) return
 
-    this.authService.userInformationLoaded.subscribe(
-      () => {
-        if (this.isManageable()) return
-
-        // It's not our account, we can report it
-        this.prependModerationActions = [
-          {
-            label: $localize`Report`,
-            isHeader: true
-          },
-          {
-            label: $localize`Report this account`,
-            handler: () => this.showReportModal()
-          }
-        ]
+    // It's not our account, we can report it
+    this.prependModerationActions = [
+      {
+        label: $localize`Report`,
+        isHeader: true
+      },
+      {
+        label: $localize`Report this account`,
+        handler: () => this.showReportModal()
       }
-    )
+    ]
   }
 
   private loadAccountVideosCount () {

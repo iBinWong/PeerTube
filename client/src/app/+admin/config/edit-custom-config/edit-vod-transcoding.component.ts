@@ -1,20 +1,42 @@
-
-import { SelectOptionsItem } from 'src/types/select-options-item.model'
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core'
-import { FormGroup } from '@angular/forms'
+import { NgClass, NgFor, NgIf } from '@angular/common'
+import { Component, OnChanges, OnInit, SimpleChanges, inject, input } from '@angular/core'
+import { FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { RouterLink } from '@angular/router'
+import { Notifier } from '@app/core'
 import { HTMLServerConfig } from '@peertube/peertube-models'
+import { SelectOptionsItem } from 'src/types/select-options-item.model'
+import { PeertubeCheckboxComponent } from '../../../shared/shared-forms/peertube-checkbox.component'
+import { SelectCustomValueComponent } from '../../../shared/shared-forms/select/select-custom-value.component'
+import { SelectOptionsComponent } from '../../../shared/shared-forms/select/select-options.component'
+import { PeerTubeTemplateDirective } from '../../../shared/shared-main/common/peertube-template.directive'
 import { ConfigService } from '../shared/config.service'
 import { EditConfigurationService, ResolutionOption } from './edit-configuration.service'
 
 @Component({
   selector: 'my-edit-vod-transcoding',
   templateUrl: './edit-vod-transcoding.component.html',
-  styleUrls: [ './edit-custom-config.component.scss' ]
+  styleUrls: [ './edit-custom-config.component.scss' ],
+  imports: [
+    FormsModule,
+    ReactiveFormsModule,
+    PeertubeCheckboxComponent,
+    PeerTubeTemplateDirective,
+    NgClass,
+    NgFor,
+    NgIf,
+    RouterLink,
+    SelectCustomValueComponent,
+    SelectOptionsComponent
+  ]
 })
 export class EditVODTranscodingComponent implements OnInit, OnChanges {
-  @Input() form: FormGroup
-  @Input() formErrors: any
-  @Input() serverConfig: HTMLServerConfig
+  private configService = inject(ConfigService)
+  private editConfigurationService = inject(EditConfigurationService)
+  private notifier = inject(Notifier)
+
+  readonly form = input<FormGroup>(undefined)
+  readonly formErrors = input<any>(undefined)
+  readonly serverConfig = input<HTMLServerConfig>(undefined)
 
   transcodingThreadOptions: SelectOptionsItem[] = []
   transcodingProfiles: SelectOptionsItem[] = []
@@ -22,14 +44,9 @@ export class EditVODTranscodingComponent implements OnInit, OnChanges {
 
   additionalVideoExtensions = ''
 
-  constructor (
-    private configService: ConfigService,
-    private editConfigurationService: EditConfigurationService
-  ) { }
-
   ngOnInit () {
     this.transcodingThreadOptions = this.configService.transcodingThreadOptions
-    this.resolutions = this.editConfigurationService.getVODResolutions()
+    this.resolutions = this.editConfigurationService.getTranscodingResolutions()
 
     this.checkTranscodingFields()
   }
@@ -38,12 +55,12 @@ export class EditVODTranscodingComponent implements OnInit, OnChanges {
     if (changes['serverConfig']) {
       this.transcodingProfiles = this.buildAvailableTranscodingProfile()
 
-      this.additionalVideoExtensions = this.serverConfig.video.file.extensions.join(' ')
+      this.additionalVideoExtensions = this.serverConfig().video.file.extensions.join(' ')
     }
   }
 
   buildAvailableTranscodingProfile () {
-    const profiles = this.serverConfig.transcoding.availableProfiles
+    const profiles = this.serverConfig().transcoding.availableProfiles
 
     return profiles.map(p => {
       if (p === 'default') {
@@ -59,19 +76,27 @@ export class EditVODTranscodingComponent implements OnInit, OnChanges {
   }
 
   isRemoteRunnerVODEnabled () {
-    return this.editConfigurationService.isRemoteRunnerVODEnabled(this.form)
+    return this.editConfigurationService.isRemoteRunnerVODEnabled(this.form())
   }
 
   isTranscodingEnabled () {
-    return this.editConfigurationService.isTranscodingEnabled(this.form)
+    return this.editConfigurationService.isTranscodingEnabled(this.form())
+  }
+
+  isHLSEnabled () {
+    return this.editConfigurationService.isHLSEnabled(this.form())
   }
 
   isStudioEnabled () {
-    return this.editConfigurationService.isStudioEnabled(this.form)
+    return this.editConfigurationService.isStudioEnabled(this.form())
   }
 
   getTranscodingDisabledClass () {
     return { 'disabled-checkbox-extra': !this.isTranscodingEnabled() }
+  }
+
+  getHLSDisabledClass () {
+    return { 'disabled-checkbox-extra': !this.isHLSEnabled() }
   }
 
   getLocalTranscodingDisabledClass () {
@@ -83,43 +108,49 @@ export class EditVODTranscodingComponent implements OnInit, OnChanges {
   }
 
   getTotalTranscodingThreads () {
-    return this.editConfigurationService.getTotalTranscodingThreads(this.form)
+    return this.editConfigurationService.getTotalTranscodingThreads(this.form())
   }
 
   private checkTranscodingFields () {
-    const transcodingControl = this.form.get('transcoding.enabled')
-    const videoStudioControl = this.form.get('videoStudio.enabled')
-    const hlsControl = this.form.get('transcoding.hls.enabled')
-    const webVideosControl = this.form.get('transcoding.webVideos.enabled')
+    const transcodingControl = this.form().get('transcoding.enabled')
+    const videoStudioControl = this.form().get('videoStudio.enabled')
+    const hlsControl = this.form().get('transcoding.hls.enabled')
+    const webVideosControl = this.form().get('transcoding.webVideos.enabled')
 
     webVideosControl.valueChanges
-                     .subscribe(newValue => {
-                       if (newValue === false && !hlsControl.disabled) {
-                         hlsControl.disable()
-                       }
+      .subscribe(newValue => {
+        if (newValue === false && hlsControl.value === false) {
+          hlsControl.setValue(true)
 
-                       if (newValue === true && !hlsControl.enabled) {
-                         hlsControl.enable()
-                       }
-                     })
+          // eslint-disable-next-line max-len
+          this.notifier.info(
+            $localize`Automatically enable HLS transcoding because at least 1 output format must be enabled when transcoding is enabled`,
+            '',
+            10000
+          )
+        }
+      })
 
     hlsControl.valueChanges
-              .subscribe(newValue => {
-                if (newValue === false && !webVideosControl.disabled) {
-                  webVideosControl.disable()
-                }
+      .subscribe(newValue => {
+        if (newValue === false && webVideosControl.value === false) {
+          webVideosControl.setValue(true)
 
-                if (newValue === true && !webVideosControl.enabled) {
-                  webVideosControl.enable()
-                }
-              })
+          this.notifier.info(
+            // eslint-disable-next-line max-len
+            $localize`Automatically enable Web Videos transcoding because at least 1 output format must be enabled when transcoding is enabled`,
+            '',
+            10000
+          )
+        }
+      })
 
     transcodingControl.valueChanges
-              .subscribe(newValue => {
-                if (newValue === false) {
-                  videoStudioControl.setValue(false)
-                }
-              })
+      .subscribe(newValue => {
+        if (newValue === false) {
+          videoStudioControl.setValue(false)
+        }
+      })
 
     transcodingControl.updateValueAndValidity()
     webVideosControl.updateValueAndValidity()

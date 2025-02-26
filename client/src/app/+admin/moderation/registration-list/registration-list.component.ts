@@ -1,21 +1,52 @@
-import { SortMeta } from 'primeng/api'
-import { Component, OnInit, ViewChild } from '@angular/core'
+import { NgClass, NgIf } from '@angular/common'
+import { Component, OnInit, inject, viewChild } from '@angular/core'
 import { ActivatedRoute, Router } from '@angular/router'
 import { ConfirmService, MarkdownService, Notifier, RestPagination, RestTable, ServerService } from '@app/core'
 import { formatICU } from '@app/helpers'
-import { AdvancedInputFilter } from '@app/shared/shared-forms'
-import { DropdownAction } from '@app/shared/shared-main'
+import { PTDatePipe } from '@app/shared/shared-main/common/date.pipe'
+import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
 import { UserRegistration, UserRegistrationState } from '@peertube/peertube-models'
+import { SharedModule, SortMeta } from 'primeng/api'
+import { TableModule } from 'primeng/table'
+import { AdvancedInputFilter, AdvancedInputFilterComponent } from '../../../shared/shared-forms/advanced-input-filter.component'
+import { GlobalIconComponent } from '../../../shared/shared-icons/global-icon.component'
+import { ActionDropdownComponent, DropdownAction } from '../../../shared/shared-main/buttons/action-dropdown.component'
+import { AutoColspanDirective } from '../../../shared/shared-main/common/auto-colspan.directive'
+import { TableExpanderIconComponent } from '../../../shared/shared-tables/table-expander-icon.component'
+import { UserEmailInfoComponent } from '../../shared/user-email-info.component'
 import { AdminRegistrationService } from './admin-registration.service'
 import { ProcessRegistrationModalComponent } from './process-registration-modal.component'
 
 @Component({
   selector: 'my-registration-list',
   templateUrl: './registration-list.component.html',
-  styleUrls: [ '../../../shared/shared-moderation/moderation.scss', './registration-list.component.scss' ]
+  styleUrls: [ '../../../shared/shared-moderation/moderation.scss', './registration-list.component.scss' ],
+  imports: [
+    GlobalIconComponent,
+    TableModule,
+    SharedModule,
+    NgIf,
+    ActionDropdownComponent,
+    AdvancedInputFilterComponent,
+    NgbTooltip,
+    TableExpanderIconComponent,
+    NgClass,
+    UserEmailInfoComponent,
+    AutoColspanDirective,
+    ProcessRegistrationModalComponent,
+    PTDatePipe
+  ]
 })
-export class RegistrationListComponent extends RestTable <UserRegistration> implements OnInit {
-  @ViewChild('processRegistrationModal', { static: true }) processRegistrationModal: ProcessRegistrationModalComponent
+export class RegistrationListComponent extends RestTable<UserRegistration> implements OnInit {
+  protected route = inject(ActivatedRoute)
+  protected router = inject(Router)
+  private server = inject(ServerService)
+  private notifier = inject(Notifier)
+  private markdownRenderer = inject(MarkdownService)
+  private confirmService = inject(ConfirmService)
+  private adminRegistrationService = inject(AdminRegistrationService)
+
+  readonly processRegistrationModal = viewChild<ProcessRegistrationModalComponent>('processRegistrationModal')
 
   registrations: (UserRegistration & { registrationReasonHTML?: string, moderationResponseHTML?: string })[] = []
   totalRecords = 0
@@ -29,15 +60,7 @@ export class RegistrationListComponent extends RestTable <UserRegistration> impl
 
   requiresEmailVerification: boolean
 
-  constructor (
-    protected route: ActivatedRoute,
-    protected router: Router,
-    private server: ServerService,
-    private notifier: Notifier,
-    private markdownRenderer: MarkdownService,
-    private confirmService: ConfirmService,
-    private adminRegistrationService: AdminRegistrationService
-  ) {
+  constructor () {
     super()
 
     this.registrationActions = [
@@ -114,7 +137,7 @@ export class RegistrationListComponent extends RestTable <UserRegistration> impl
   }
 
   private openRegistrationRequestProcessModal (registration: UserRegistration, mode: 'accept' | 'reject') {
-    this.processRegistrationModal.openModal(registration, mode)
+    this.processRegistrationModal().openModal(registration, mode)
   }
 
   private async removeRegistrations (registrations: UserRegistration[]) {

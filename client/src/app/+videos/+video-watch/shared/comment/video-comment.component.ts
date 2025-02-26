@@ -1,36 +1,63 @@
-
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output, ViewChild } from '@angular/core'
+import { NgClass, NgFor, NgIf } from '@angular/common'
+import { Component, OnChanges, OnInit, inject, input, model, output, viewChild } from '@angular/core'
+import { RouterLink } from '@angular/router'
 import { MarkdownService, Notifier, UserService } from '@app/core'
 import { AuthService } from '@app/core/auth'
-import { Account, DropdownAction, Video } from '@app/shared/shared-main'
+import { Account } from '@app/shared/shared-main/account/account.model'
+import { DropdownAction } from '@app/shared/shared-main/buttons/action-dropdown.component'
+import { Video } from '@app/shared/shared-main/video/video.model'
 import { CommentReportComponent } from '@app/shared/shared-moderation/report-modals/comment-report.component'
-import { VideoComment, VideoCommentThreadTree } from '@app/shared/shared-video-comment'
+import { VideoCommentThreadTree } from '@app/shared/shared-video-comment/video-comment-thread-tree.model'
+import { VideoComment } from '@app/shared/shared-video-comment/video-comment.model'
 import { User, UserRight } from '@peertube/peertube-models'
+import { ActorAvatarComponent } from '../../../../shared/shared-actor-image/actor-avatar.component'
+import { FromNowPipe } from '../../../../shared/shared-main/date/from-now.pipe'
+import { UserModerationDropdownComponent } from '../../../../shared/shared-moderation/user-moderation-dropdown.component'
+import { TimestampRouteTransformerDirective } from '../timestamp-route-transformer.directive'
+import { VideoCommentAddComponent } from './video-comment-add.component'
 
 @Component({
   selector: 'my-video-comment',
   templateUrl: './video-comment.component.html',
-  styleUrls: [ './video-comment.component.scss' ]
+  styleUrls: [ './video-comment.component.scss' ],
+  imports: [
+    NgIf,
+    NgClass,
+    ActorAvatarComponent,
+    RouterLink,
+    TimestampRouteTransformerDirective,
+    UserModerationDropdownComponent,
+    VideoCommentAddComponent,
+    NgFor,
+    CommentReportComponent,
+    FromNowPipe
+  ]
 })
 export class VideoCommentComponent implements OnInit, OnChanges {
-  @ViewChild('commentReportModal') commentReportModal: CommentReportComponent
+  private markdownService = inject(MarkdownService)
+  private authService = inject(AuthService)
+  private userService = inject(UserService)
+  private notifier = inject(Notifier)
 
-  @Input() video: Video
-  @Input() videoPassword: string
-  @Input() comment: VideoComment
-  @Input() parentComments: VideoComment[] = []
-  @Input() commentTree: VideoCommentThreadTree
-  @Input() inReplyToCommentId: number
-  @Input() highlightedComment = false
-  @Input() firstInThread = false
-  @Input() redraftValue?: string
+  readonly commentReportModal = viewChild<CommentReportComponent>('commentReportModal')
 
-  @Output() wantedToReply = new EventEmitter<VideoComment>()
-  @Output() wantedToDelete = new EventEmitter<VideoComment>()
-  @Output() wantedToRedraft = new EventEmitter<VideoComment>()
-  @Output() threadCreated = new EventEmitter<VideoCommentThreadTree>()
-  @Output() resetReply = new EventEmitter()
-  @Output() timestampClicked = new EventEmitter<number>()
+  readonly video = input<Video>(undefined)
+  readonly videoPassword = input<string>(undefined)
+  readonly comment = input<VideoComment>(undefined)
+  readonly parentComments = input<VideoComment[]>([])
+  readonly inReplyToCommentId = input<number>(undefined)
+  readonly highlightedComment = input(false)
+  readonly firstInThread = input(false)
+  readonly commentTree = model<VideoCommentThreadTree>(undefined)
+  readonly redraftValue = model<string>(undefined)
+
+  readonly wantedToReply = output<VideoComment>()
+  readonly wantedToDelete = output<VideoComment>()
+  readonly wantedToApprove = output<VideoComment>()
+  readonly wantedToRedraft = output<VideoComment>()
+  readonly threadCreated = output<VideoCommentThreadTree>()
+  readonly resetReply = output()
+  readonly timestampClicked = output<number>()
 
   prependModerationActions: DropdownAction<any>[]
 
@@ -39,13 +66,6 @@ export class VideoCommentComponent implements OnInit, OnChanges {
 
   commentAccount: Account
   commentUser: User
-
-  constructor (
-    private markdownService: MarkdownService,
-    private authService: AuthService,
-    private userService: UserService,
-    private notifier: Notifier
-  ) {}
 
   get user () {
     return this.authService.getUser()
@@ -60,17 +80,17 @@ export class VideoCommentComponent implements OnInit, OnChanges {
   }
 
   onCommentReplyCreated (createdComment: VideoComment) {
-    if (!this.commentTree) {
-      this.commentTree = {
-        comment: this.comment,
+    if (!this.commentTree()) {
+      this.commentTree.set({
+        comment: this.comment(),
         hasDisplayedChildren: false,
         children: []
-      }
+      })
 
-      this.threadCreated.emit(this.commentTree)
+      this.threadCreated.emit(this.commentTree())
     }
 
-    this.commentTree.children.unshift({
+    this.commentTree().children.unshift({
       comment: createdComment,
       hasDisplayedChildren: false,
       children: []
@@ -78,19 +98,23 @@ export class VideoCommentComponent implements OnInit, OnChanges {
 
     this.resetReply.emit()
 
-    this.redraftValue = undefined
+    this.redraftValue.set(undefined)
   }
 
   onWantToReply (comment?: VideoComment) {
-    this.wantedToReply.emit(comment || this.comment)
+    this.wantedToReply.emit(comment || this.comment())
   }
 
   onWantToDelete (comment?: VideoComment) {
-    this.wantedToDelete.emit(comment || this.comment)
+    this.wantedToDelete.emit(comment || this.comment())
   }
 
   onWantToRedraft (comment?: VideoComment) {
-    this.wantedToRedraft.emit(comment || this.comment)
+    this.wantedToRedraft.emit(comment || this.comment())
+  }
+
+  onWantToApprove (comment?: VideoComment) {
+    this.wantedToApprove.emit(comment || this.comment())
   }
 
   isUserLoggedIn () {
@@ -105,42 +129,54 @@ export class VideoCommentComponent implements OnInit, OnChanges {
     this.timestampClicked.emit(timestamp)
   }
 
-  isRemovableByUser () {
-    return this.comment.account && this.isUserLoggedIn() &&
+  canBeRemovedUser () {
+    const comment = this.comment()
+    return comment.account && this.isUserLoggedIn() &&
       (
-        this.user.account.id === this.comment.account.id ||
-        this.user.account.id === this.video.account.id ||
-        this.user.hasRight(UserRight.REMOVE_ANY_VIDEO_COMMENT)
+        this.user.account.id === comment.account.id ||
+        this.user.account.id === this.video().account.id ||
+        this.user.hasRight(UserRight.MANAGE_ANY_VIDEO_COMMENT)
+      )
+  }
+
+  canBeApprovedByUser () {
+    return this.comment().account && this.isUserLoggedIn() &&
+      (
+        this.user.account.id === this.video().account.id ||
+        this.user.hasRight(UserRight.MANAGE_ANY_VIDEO_COMMENT)
       )
   }
 
   isRedraftableByUser () {
+    const comment = this.comment()
     return (
-      this.comment.account &&
+      comment.account &&
       this.isUserLoggedIn() &&
-      this.user.account.id === this.comment.account.id &&
-      this.comment.totalReplies === 0
+      this.user.account.id === comment.account.id &&
+      comment.totalReplies === 0
     )
   }
 
   isReportableByUser () {
+    const comment = this.comment()
     return (
-      this.comment.account &&
+      comment.account &&
       this.isUserLoggedIn() &&
-      this.comment.isDeleted === false &&
-      this.user.account.id !== this.comment.account.id
+      comment.isDeleted === false &&
+      this.user.account.id !== comment.account.id
     )
   }
 
   isCommentDisplayed () {
     // Not deleted
-    return !this.comment.isDeleted ||
-      this.comment.totalReplies !== 0 || // Or root comment thread has replies
-      (this.commentTree?.hasDisplayedChildren) // Or this is a reply that have other replies
+    const comment = this.comment()
+    return !comment.isDeleted ||
+      comment.totalReplies !== 0 || // Or root comment thread has replies
+      (this.commentTree()?.hasDisplayedChildren) // Or this is a reply that have other replies
   }
 
   isChild () {
-    return this.parentComments.length !== 0
+    return this.parentComments().length !== 0
   }
 
   private getUserIfNeeded (account: Account) {
@@ -150,29 +186,38 @@ export class VideoCommentComponent implements OnInit, OnChanges {
     const user = this.authService.getUser()
     if (user.hasRight(UserRight.MANAGE_USERS)) {
       this.userService.getUserWithCache(account.userId)
-          .subscribe({
-            next: user => this.commentUser = user,
+        .subscribe({
+          next: user => this.commentUser = user,
 
-            error: err => this.notifier.error(err.message)
-          })
+          error: err => this.notifier.error(err.message)
+        })
     }
   }
 
   private async init () {
     // Before HTML rendering restore line feed for markdown list compatibility
-    const commentText = this.comment.text.replace(/<br.?\/?>/g, '\r\n')
+    const commentText = this.comment().text.replace(/<br.?\/?>/g, '\r\n')
     const html = await this.markdownService.textMarkdownToHTML({ markdown: commentText, withHtml: true, withEmoji: true })
-    this.sanitizedCommentHTML = this.markdownService.processVideoTimestamps(this.video.shortUUID, html)
-    this.newParentComments = this.parentComments.concat([ this.comment ])
+    this.sanitizedCommentHTML = this.markdownService.processVideoTimestamps(this.video().shortUUID, html)
+    this.newParentComments = this.parentComments().concat([ this.comment() ])
 
-    if (this.comment.account) {
-      this.commentAccount = new Account(this.comment.account)
+    const comment = this.comment()
+    if (comment.account) {
+      this.commentAccount = new Account(comment.account)
       this.getUserIfNeeded(this.commentAccount)
     } else {
-      this.comment.account = null
+      comment.account = null
     }
 
     this.prependModerationActions = []
+
+    if (this.canBeApprovedByUser() && comment.heldForReview) {
+      this.prependModerationActions.push({
+        label: $localize`Approve`,
+        iconName: 'tick',
+        handler: () => this.onWantToApprove()
+      })
+    }
 
     if (this.isReportableByUser()) {
       this.prependModerationActions.push({
@@ -182,7 +227,7 @@ export class VideoCommentComponent implements OnInit, OnChanges {
       })
     }
 
-    if (this.isRemovableByUser()) {
+    if (this.canBeRemovedUser()) {
       this.prependModerationActions.push({
         label: $localize`Remove`,
         iconName: 'delete',
@@ -207,6 +252,6 @@ export class VideoCommentComponent implements OnInit, OnChanges {
   }
 
   private showReportModal () {
-    this.commentReportModal.show()
+    this.commentReportModal().show()
   }
 }

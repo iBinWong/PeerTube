@@ -1,22 +1,31 @@
-import { switchMap } from 'rxjs/operators'
+import { NgClass, NgFor, NgIf } from '@angular/common'
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  EventEmitter,
-  Inject,
-  Input,
   LOCALE_ID,
   OnInit,
-  Output
+  booleanAttribute,
+  numberAttribute,
+  inject,
+  input,
+  output
 } from '@angular/core'
+import { RouterLink } from '@angular/router'
 import { AuthService, ScreenService, ServerService, User } from '@app/core'
 import { HTMLServerConfig, VideoExistInPlaylist, VideoPlaylistType, VideoPrivacy, VideoState } from '@peertube/peertube-models'
+import { switchMap } from 'rxjs/operators'
 import { LinkType } from '../../../types/link.type'
-import { ActorAvatarSize } from '../shared-actor-image/actor-avatar.component'
-import { Video, VideoService } from '../shared-main'
-import { VideoPlaylistService } from '../shared-video-playlist'
-import { VideoActionsDisplayType } from './video-actions-dropdown.component'
+import { ActorAvatarComponent } from '../shared-actor-image/actor-avatar.component'
+import { LinkComponent } from '../shared-main/common/link.component'
+import { DateToggleComponent } from '../shared-main/date/date-toggle.component'
+import { Video } from '../shared-main/video/video.model'
+import { VideoService } from '../shared-main/video/video.service'
+import { VideoThumbnailComponent } from '../shared-thumbnail/video-thumbnail.component'
+import { VideoPlaylistService } from '../shared-video-playlist/video-playlist.service'
+import { VideoViewsCounterComponent } from '../shared-video/video-views-counter.component'
+import { VideoActionsDisplayType, VideoActionsDropdownComponent } from './video-actions-dropdown.component'
+import { ActorHostComponent } from '../standalone-actor/actor-host.component'
 
 export type MiniatureDisplayOptions = {
   date?: boolean
@@ -31,31 +40,53 @@ export type MiniatureDisplayOptions = {
   by?: boolean
   forceChannelInBy?: boolean
 }
+
 @Component({
   selector: 'my-video-miniature',
   styleUrls: [ './video-miniature.component.scss' ],
   templateUrl: './video-miniature.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    NgClass,
+    VideoThumbnailComponent,
+    NgIf,
+    ActorAvatarComponent,
+    LinkComponent,
+    DateToggleComponent,
+    VideoViewsCounterComponent,
+    RouterLink,
+    NgFor,
+    VideoActionsDropdownComponent,
+    ActorHostComponent
+  ]
 })
 export class VideoMiniatureComponent implements OnInit {
-  @Input() user: User
-  @Input() video: Video
-  @Input() containedInPlaylists: VideoExistInPlaylist[]
+  private screenService = inject(ScreenService)
+  private serverService = inject(ServerService)
+  private authService = inject(AuthService)
+  private videoPlaylistService = inject(VideoPlaylistService)
+  private videoService = inject(VideoService)
+  private cd = inject(ChangeDetectorRef)
+  private localeId = inject(LOCALE_ID)
 
-  @Input() displayOptions: MiniatureDisplayOptions = {
+  readonly user = input<User>(undefined)
+  readonly video = input<Video>(undefined)
+  readonly containedInPlaylists = input<VideoExistInPlaylist[]>(undefined)
+
+  readonly displayOptions = input<MiniatureDisplayOptions>({
     date: true,
     views: true,
     by: true,
-    avatar: false,
+    avatar: true,
     privacyLabel: false,
     privacyText: false,
     state: false,
     blacklistInfo: false,
     forceChannelInBy: false
-  }
+  })
 
-  @Input() displayVideoActions = true
-  @Input() videoActionsDisplayOptions: VideoActionsDisplayType = {
+  readonly displayVideoActions = input(true)
+  readonly videoActionsDisplayOptions = input<VideoActionsDisplayType>({
     playlist: true,
     download: false,
     update: true,
@@ -66,18 +97,18 @@ export class VideoMiniatureComponent implements OnInit {
     mute: true,
     studio: false,
     stats: false
-  }
+  })
 
-  @Input() actorImageSize: ActorAvatarSize = '40'
+  readonly actorImageSize = input(34, { transform: numberAttribute })
 
-  @Input() displayAsRow = false
+  readonly displayAsRow = input(false, { transform: booleanAttribute })
 
-  @Input() videoLinkType: LinkType = 'internal'
+  readonly videoLinkType = input<LinkType>('internal')
 
-  @Output() videoBlocked = new EventEmitter()
-  @Output() videoUnblocked = new EventEmitter()
-  @Output() videoRemoved = new EventEmitter()
-  @Output() videoAccountMuted = new EventEmitter()
+  readonly videoBlocked = output()
+  readonly videoUnblocked = output()
+  readonly videoRemoved = output()
+  readonly videoAccountMuted = output()
 
   showActions = false
   serverConfig: HTMLServerConfig
@@ -97,31 +128,22 @@ export class VideoMiniatureComponent implements OnInit {
   videoTarget: string
 
   private ownerDisplayType: 'account' | 'videoChannel'
-
-  constructor (
-    private screenService: ScreenService,
-    private serverService: ServerService,
-    private authService: AuthService,
-    private videoPlaylistService: VideoPlaylistService,
-    private videoService: VideoService,
-    private cd: ChangeDetectorRef,
-    @Inject(LOCALE_ID) private localeId: string
-  ) {}
+  private actionsLoaded = false
 
   get authorAccount () {
     return this.serverConfig.client.videos.miniature.preferAuthorDisplayName
-      ? this.video.account.displayName
-      : this.video.byAccount
+      ? this.video().account.displayName
+      : this.video().account.name
   }
 
   get authorChannel () {
     return this.serverConfig.client.videos.miniature.preferAuthorDisplayName
-      ? this.video.channel.displayName
-      : this.video.byVideoChannel
+      ? this.video().channel.displayName
+      : this.video().channel.name
   }
 
   get isVideoBlur () {
-    return this.video.isVideoNSFWForUser(this.user, this.serverConfig)
+    return this.video().isVideoNSFWForUser(this.user(), this.serverConfig)
   }
 
   ngOnInit () {
@@ -130,7 +152,7 @@ export class VideoMiniatureComponent implements OnInit {
 
     this.setUpBy()
 
-    this.channelLinkTitle = $localize`${this.video.channel.name} (channel page)`
+    this.channelLinkTitle = $localize`${this.video().channel.name} (channel page)`
 
     // We rely on mouseenter to lazy load actions
     if (this.screenService.isInTouchScreen()) {
@@ -139,20 +161,22 @@ export class VideoMiniatureComponent implements OnInit {
   }
 
   buildVideoLink () {
-    if (this.videoLinkType === 'internal' || !this.video.url) {
-      this.videoRouterLink = Video.buildWatchUrl(this.video)
+    const videoLinkType = this.videoLinkType()
+    const video = this.video()
+    if (videoLinkType === 'internal' || !video.url) {
+      this.videoRouterLink = Video.buildWatchUrl(video)
       return
     }
 
-    if (this.videoLinkType === 'external') {
+    if (videoLinkType === 'external') {
       this.videoRouterLink = null
-      this.videoHref = this.video.url
+      this.videoHref = video.url
       this.videoTarget = '_blank'
       return
     }
 
     // Lazy load
-    this.videoRouterLink = [ '/search/lazy-load-video', { url: this.video.url } ]
+    this.videoRouterLink = [ '/search/lazy-load-video', { url: video.url } ]
   }
 
   displayOwnerAccount () {
@@ -164,15 +188,15 @@ export class VideoMiniatureComponent implements OnInit {
   }
 
   isUnlistedVideo () {
-    return this.video.privacy.id === VideoPrivacy.UNLISTED
+    return this.video().privacy.id === VideoPrivacy.UNLISTED
   }
 
   isPrivateVideo () {
-    return this.video.privacy.id === VideoPrivacy.PRIVATE
+    return this.video().privacy.id === VideoPrivacy.PRIVATE
   }
 
   isPasswordProtectedVideo () {
-    return this.video.privacy.id === VideoPrivacy.PASSWORD_PROTECTED
+    return this.video().privacy.id === VideoPrivacy.PASSWORD_PROTECTED
   }
 
   getStateLabel (video: Video) {
@@ -187,37 +211,48 @@ export class VideoMiniatureComponent implements OnInit {
       return $localize`Publication scheduled on ${updateAt}`
     }
 
-    if (video.state.id === VideoState.TRANSCODING_FAILED) {
-      return $localize`Transcoding failed`
-    }
+    switch (video.state.id) {
+      case VideoState.TRANSCODING_FAILED:
+        return $localize`Transcoding failed`
 
-    if (video.state.id === VideoState.TO_MOVE_TO_EXTERNAL_STORAGE_FAILED) {
-      return $localize`Move to external storage failed`
-    }
+      case VideoState.TO_MOVE_TO_FILE_SYSTEM:
+        return $localize`Moving to file system`
 
-    if (video.state.id === VideoState.TO_TRANSCODE && video.waitTranscoding === true) {
-      return $localize`Waiting transcoding`
-    }
+      case VideoState.TO_MOVE_TO_FILE_SYSTEM_FAILED:
+        return $localize`Moving to file system failed`
 
-    if (video.state.id === VideoState.TO_TRANSCODE) {
-      return $localize`To transcode`
-    }
+      case VideoState.TO_MOVE_TO_EXTERNAL_STORAGE:
+        return $localize`Moving to external storage`
 
-    if (video.state.id === VideoState.TO_IMPORT) {
-      return $localize`To import`
-    }
+      case VideoState.TO_MOVE_TO_EXTERNAL_STORAGE_FAILED:
+        return $localize`Move to external storage failed`
 
-    if (video.state.id === VideoState.TO_EDIT) {
-      return $localize`To edit`
+      case VideoState.TO_TRANSCODE:
+        return video.waitTranscoding === true
+          ? $localize`Waiting transcoding`
+          : $localize`To transcode`
+
+      case VideoState.TO_IMPORT:
+        return $localize`To import`
+
+      case VideoState.TO_EDIT:
+        return $localize`To edit`
     }
 
     return ''
   }
 
+  getAriaLabel () {
+    return $localize`Watch video ${this.video().name}`
+  }
+
   loadActions () {
-    if (this.displayVideoActions) this.showActions = true
+    if (this.actionsLoaded) return
+    if (this.displayVideoActions()) this.showActions = true
 
     this.loadWatchLater()
+
+    this.actionsLoaded = true
   }
 
   onVideoBlocked () {
@@ -248,7 +283,7 @@ export class VideoMiniatureComponent implements OnInit {
   }
 
   addToWatchLater () {
-    const body = { videoId: this.video.id }
+    const body = { videoId: this.video().id }
 
     this.videoPlaylistService.addVideoInPlaylist(this.watchLaterPlaylist.id, body)
       .subscribe(
@@ -259,53 +294,63 @@ export class VideoMiniatureComponent implements OnInit {
   }
 
   removeFromWatchLater () {
-    this.videoPlaylistService.removeVideoFromPlaylist(this.watchLaterPlaylist.id, this.watchLaterPlaylist.playlistElementId, this.video.id)
-        .subscribe(
-          _ => { /* empty */ }
-        )
+    this.videoPlaylistService.removeVideoFromPlaylist(
+      this.watchLaterPlaylist.id,
+      this.watchLaterPlaylist.playlistElementId,
+      this.video().id
+    )
+      .subscribe(
+        _ => {
+          // empty
+        }
+      )
   }
 
   isWatchLaterPlaylistDisplayed () {
-    return this.displayVideoActions && this.isUserLoggedIn() && this.inWatchLaterPlaylist !== undefined
+    return !this.screenService.isInTouchScreen() &&
+      this.displayVideoActions() &&
+      this.isUserLoggedIn() &&
+      this.inWatchLaterPlaylist !== undefined
   }
 
   getClasses () {
     return {
-      'display-as-row': this.displayAsRow
+      'display-as-row': this.displayAsRow(),
+      'has-avatar': this.displayOptions().avatar
     }
   }
 
   private setUpBy () {
-    if (this.displayOptions.forceChannelInBy) {
+    if (this.displayOptions().forceChannelInBy) {
       this.ownerDisplayType = 'videoChannel'
       return
     }
 
-    this.ownerDisplayType = this.videoService.buildDefaultOwnerDisplayType(this.video)
+    this.ownerDisplayType = this.videoService.buildDefaultOwnerDisplayType(this.video())
   }
 
   private loadWatchLater () {
-    if (!this.isUserLoggedIn() || this.inWatchLaterPlaylist !== undefined) return
+    if (this.screenService.isInTouchScreen() || !this.displayVideoActions() || !this.isUserLoggedIn()) return
 
     this.authService.userInformationLoaded
-        .pipe(switchMap(() => this.videoPlaylistService.listenToVideoPlaylistChange(this.video.id)))
-        .subscribe(existResult => {
-          const watchLaterPlaylist = this.authService.getUser().specialPlaylists.find(p => p.type === VideoPlaylistType.WATCH_LATER)
-          const existsInWatchLater = existResult.find(r => r.playlistId === watchLaterPlaylist.id)
-          this.inWatchLaterPlaylist = false
+      .pipe(switchMap(() => this.videoPlaylistService.listenToVideoPlaylistChange(this.video().id)))
+      .subscribe(existResult => {
+        const watchLaterPlaylist = this.authService.getUser().specialPlaylists.find(p => p.type === VideoPlaylistType.WATCH_LATER)
+        const existsInWatchLater = existResult.find(r => r.playlistId === watchLaterPlaylist.id)
+        this.inWatchLaterPlaylist = false
 
-          this.watchLaterPlaylist = {
-            id: watchLaterPlaylist.id
-          }
+        this.watchLaterPlaylist = {
+          id: watchLaterPlaylist.id
+        }
 
-          if (existsInWatchLater) {
-            this.inWatchLaterPlaylist = true
-            this.watchLaterPlaylist.playlistElementId = existsInWatchLater.playlistElementId
-          }
+        if (existsInWatchLater) {
+          this.inWatchLaterPlaylist = true
+          this.watchLaterPlaylist.playlistElementId = existsInWatchLater.playlistElementId
+        }
 
-          this.cd.markForCheck()
-        })
+        this.cd.markForCheck()
+      })
 
-    this.videoPlaylistService.runVideoExistsInPlaylistCheck(this.video.id)
+    this.videoPlaylistService.runVideoExistsInPlaylistCheck(this.video().id)
   }
 }

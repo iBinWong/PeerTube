@@ -1,4 +1,4 @@
-import { ActivityIconObject, ActivityPubAttributedTo } from './objects/common-objects.js'
+import { ActivityIconObject, ActivityPubAttributedTo, ActivityUrlObject } from './objects/common-objects.js'
 
 export type ActivityPubActorType = 'Person' | 'Application' | 'Group' | 'Service' | 'Organization'
 
@@ -12,13 +12,13 @@ export interface ActivityPubActor {
   inbox: string
   outbox: string
   preferredUsername: string
-  url: string
+  url: ActivityUrlObject[] | string
   name: string
   endpoints: {
     sharedInbox: string
   }
   summary: string
-  attributedTo: ActivityPubAttributedTo[]
+  attributedTo?: ActivityPubAttributedTo[]
 
   support?: string
   publicKey: {
@@ -27,8 +27,15 @@ export interface ActivityPubActor {
     publicKeyPem: string
   }
 
+  // Lemmy attribute for groups
+  postingRestrictedToMods?: boolean
+
   image?: ActivityIconObject | ActivityIconObject[]
   icon?: ActivityIconObject | ActivityIconObject[]
 
   published?: string
+
+  // For export
+  likes?: string
+  dislikes?: string
 }

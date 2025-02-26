@@ -1,17 +1,41 @@
-import { SortMeta } from 'primeng/api'
-import { Component, OnInit } from '@angular/core'
+import { NgClass, NgIf } from '@angular/common'
+import { Component, OnInit, inject } from '@angular/core'
+
 import { ConfirmService, Notifier, RestPagination, RestTable } from '@app/core'
 import { formatICU } from '@app/helpers'
-import { DropdownAction } from '@app/shared/shared-main'
+import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap'
 import { RunnerJob, RunnerJobState } from '@peertube/peertube-models'
+import { SharedModule, SortMeta } from 'primeng/api'
+import { TableModule } from 'primeng/table'
+import { AdvancedInputFilter, AdvancedInputFilterComponent } from '../../../../shared/shared-forms/advanced-input-filter.component'
+
+import { AutoColspanDirective } from '../../../../shared/shared-main/common/auto-colspan.directive'
+import { ActionDropdownComponent, DropdownAction } from '../../../../shared/shared-main/buttons/action-dropdown.component'
+import { ButtonComponent } from '../../../../shared/shared-main/buttons/button.component'
+import { TableExpanderIconComponent } from '../../../../shared/shared-tables/table-expander-icon.component'
 import { RunnerJobFormatted, RunnerService } from '../runner.service'
-import { AdvancedInputFilter } from '@app/shared/shared-forms'
 
 @Component({
   selector: 'my-runner-job-list',
-  templateUrl: './runner-job-list.component.html'
+  templateUrl: './runner-job-list.component.html',
+  imports: [
+    TableModule,
+    SharedModule,
+    NgbTooltip,
+    NgIf,
+    ActionDropdownComponent,
+    AdvancedInputFilterComponent,
+    ButtonComponent,
+    TableExpanderIconComponent,
+    NgClass,
+    AutoColspanDirective
+  ]
 })
-export class RunnerJobListComponent extends RestTable <RunnerJob> implements OnInit {
+export class RunnerJobListComponent extends RestTable<RunnerJob> implements OnInit {
+  private runnerService = inject(RunnerService)
+  private notifier = inject(Notifier)
+  private confirmService = inject(ConfirmService)
+
   runnerJobs: RunnerJobFormatted[] = []
   totalRecords = 0
 
@@ -44,14 +68,6 @@ export class RunnerJobListComponent extends RestTable <RunnerJob> implements OnI
       ]
     }
   ]
-
-  constructor (
-    private runnerService: RunnerService,
-    private notifier: Notifier,
-    private confirmService: ConfirmService
-  ) {
-    super()
-  }
 
   ngOnInit () {
     this.actions = [
@@ -104,14 +120,20 @@ export class RunnerJobListComponent extends RestTable <RunnerJob> implements OnI
     if (res === false) return
 
     this.runnerService.cancelJobs(jobs)
-        .subscribe({
-          next: () => {
-            this.reloadData()
-            this.notifier.success($localize`Job(s) cancelled.`)
-          },
+      .subscribe({
+        next: () => {
+          this.reloadData()
 
-          error: err => this.notifier.error(err.message)
-        })
+          this.notifier.success(
+            formatICU(
+              $localize`{count, plural, =1 {Job cancelled} other {{count} jobs cancelled}}`,
+              { count: jobs.length }
+            )
+          )
+        },
+
+        error: err => this.notifier.error(err.message)
+      })
   }
 
   async removeJobs (jobs: RunnerJob[]) {
@@ -125,14 +147,20 @@ export class RunnerJobListComponent extends RestTable <RunnerJob> implements OnI
     if (res === false) return
 
     this.runnerService.removeJobs(jobs)
-        .subscribe({
-          next: () => {
-            this.reloadData()
-            this.notifier.success($localize`Job(s) removed.`)
-          },
+      .subscribe({
+        next: () => {
+          this.reloadData()
 
-          error: err => this.notifier.error(err.message)
-        })
+          this.notifier.success(
+            formatICU(
+              $localize`{count, plural, =1 {Job removed} other {{count} jobs removed}}`,
+              { count: jobs.length }
+            )
+          )
+        },
+
+        error: err => this.notifier.error(err.message)
+      })
   }
 
   getStateBadgeColor (job: RunnerJob) {
@@ -151,6 +179,14 @@ export class RunnerJobListComponent extends RestTable <RunnerJob> implements OnI
       default:
         return 'badge-info'
     }
+  }
+
+  getRandomRunnerNameBadge (value: string) {
+    return this.getRandomBadge('runner', value)
+  }
+
+  getRandomRunnerTypeBadge (value: string) {
+    return this.getRandomBadge('type', value)
   }
 
   protected reloadDataInternal () {
